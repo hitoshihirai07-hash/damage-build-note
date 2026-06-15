@@ -164,6 +164,19 @@ button {
   border: 1px solid var(--line);
   color: var(--ink);
   background: var(--surface);
+  white-space: nowrap;
+}
+
+.compact-button {
+  min-width: 54px;
+  padding: 0 11px;
+}
+
+.ghost-button.small {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .primary-button {
@@ -230,6 +243,39 @@ button {
 .tab-button[aria-selected="true"] {
   color: #fff;
   background: var(--blue);
+}
+
+.filter-strip {
+  display: grid;
+  grid-template-columns: auto minmax(92px, 0.45fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.filter-strip select {
+  min-height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: #fff;
+  font-weight: 800;
+}
+
+.filter-strip span {
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .view {
@@ -313,10 +359,17 @@ button {
 .field input:focus,
 .field select:focus,
 .move-select:focus,
+.filter-strip select:focus,
 .plain-select:focus,
 .stat-number:focus {
   outline: 3px solid rgba(17, 103, 232, 0.18);
   border-color: var(--blue);
+}
+
+.mega-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .stats-list {

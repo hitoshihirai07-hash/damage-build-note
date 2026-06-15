@@ -6,7 +6,9 @@
   const IV = 31;
   const POINT_TOTAL = 66;
   const POINT_MAX = 32;
-  const STORAGE_KEY = "champions-build-planner-v1";
+  const STORAGE_KEY = "damage-build-note-v1";
+  const APP_NAME = "Damage Build Note";
+  const SEASON_ALL = "all";
 
   const STAT_KEYS = [
     { key: "hp", label: "HP", csv: "HP" },
@@ -92,9 +94,14 @@
     pokemon: [],
     moves: [],
     tools: [],
+    mega: [],
+    seasonKeys: [],
+    seasonFilter: SEASON_ALL,
     ranking: null,
     pokemonByName: new Map(),
     moveByName: new Map(),
+    megaByBase: new Map(),
+    baseByMega: new Map(),
     movesByPokemon: new Map(),
     rankingByPokemon: new Map(),
     build: null,
@@ -108,27 +115,52 @@
 
   const app = document.getElementById("app");
   const toast = document.getElementById("toast");
+  let deferredInstallPrompt = null;
+
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    showToast("ホーム画面に追加しました");
+  });
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(() => {
+        showToast("オフライン保存の準備に失敗しました");
+      });
+    });
+  }
 
   init();
 
   async function init() {
     try {
-      const [pokemonCsv, moveCsv, toolCsv, rankingJson] = await Promise.all([
+      const [pokemonCsv, moveCsv, toolCsv, megaCsv, rankingJson] = await Promise.all([
         fetchText(`${DATA_DIR}/pokemon.csv`),
         fetchText(`${DATA_DIR}/pokemon_moves.csv`),
         fetchText(`${DATA_DIR}/tool.csv`),
+        fetchText(`${DATA_DIR}/mega.csv`),
         fetchJson(`${DATA_DIR}/season_ranking_single_s2.json`).catch(() => null),
       ]);
 
-      state.pokemon = parseCsv(pokemonCsv).map(normalizePokemon).filter((row) => row.name);
+      const pokemonRows = parseCsv(pokemonCsv);
+      state.seasonKeys = extractSeasonKeys(pokemonRows);
+      state.seasonFilter = state.seasonKeys[state.seasonKeys.length - 1] || SEASON_ALL;
+      state.pokemon = pokemonRows.map(normalizePokemon).filter((row) => row.name);
       state.moves = parseCsv(moveCsv).map(normalizeMove).filter((row) => row.pokemon && row.name);
       state.tools = parseCsv(toolCsv).filter((row) => row["名前"]);
+      state.mega = parseCsv(megaCsv).map(normalizeMega).filter((row) => row.baseName && row.megaName);
       state.ranking = rankingJson;
 
       state.pokemon.forEach((pokemon) => state.pokemonByName.set(pokemon.name, pokemon));
       state.moves.forEach((move) => {
         if (!state.moveByName.has(move.name)) state.moveByName.set(move.name, move);
       });
+      groupMega();
       groupMoves();
       groupRanking();
       restoreSaved();
@@ -195,6 +227,10 @@
   }
 
   function normalizePokemon(row) {
+    const seasons = {};
+    Object.keys(row).forEach((key) => {
+      if (/^S\d+$/i.test(key)) seasons[key.toUpperCase()] = row[key] === "TRUE";
+    });
     return {
       no: row["No"],
       name: row["名前"],
@@ -212,9 +248,41 @@
         spd: number(row["特防"]),
         spe: number(row["素早"]),
       },
-      season1: row["S1"] === "TRUE",
-      season2: row["S2"] === "TRUE",
+      seasons,
     };
+  }
+
+  function normalizeMega(row) {
+    return {
+      no: row["図鑑No"],
+      megaName: row["ポケモン名"],
+      type1: row["タイプ1"],
+      type2: row["タイプ2"],
+      baseName: row["元ポケモン名"],
+    };
+  }
+
+  function extractSeasonKeys(rows) {
+    const keys = new Set();
+    rows.forEach((row) => {
+      Object.keys(row).forEach((key) => {
+        if (/^S\d+$/i.test(key)) keys.add(key.toUpperCase());
+      });
+    });
+    return [...keys].sort((a, b) => number(a.slice(1), 0) - number(b.slice(1), 0));
+  }
+
+  function groupMega() {
+    state.megaByBase = new Map();
+    state.baseByMega = new Map();
+    state.mega.forEach((entry) => {
+      if (!state.megaByBase.has(entry.baseName)) state.megaByBase.set(entry.baseName, []);
+      state.megaByBase.get(entry.baseName).push(entry);
+      state.baseByMega.set(entry.megaName, entry.baseName);
+    });
+    state.megaByBase.forEach((entries) => {
+      entries.sort((a, b) => a.megaName.localeCompare(b.megaName, "ja"));
+    });
   }
 
   function normalizeMove(row) {
@@ -265,8 +333,8 @@
   }
 
   function createInitialState() {
-    const preferredAttacker = firstExisting(["ガブリアス", "リザードン", "フシギバナ"]) || state.pokemon[0].name;
-    const preferredDefender = firstExisting(["サーフゴー", "カメックス", "フシギバナ"]) || state.pokemon[1]?.name || preferredAttacker;
+    const preferredAttacker = firstSelectable(["ガブリアス", "リザードン", "フシギバナ"]) || firstSelectablePokemon().name;
+    const preferredDefender = firstSelectable(["ブリジュラス", "カメックス", "フシギバナ"]) || firstSelectablePokemon().name || preferredAttacker;
     const attackerMoves = suggestMoves(preferredAttacker);
 
     state.build = {
@@ -299,15 +367,45 @@
     return names.find((name) => state.pokemonByName.has(name));
   }
 
+  function firstSelectable(names) {
+    return names.find((name) => state.pokemonByName.has(name) && isPokemonSelectable(name));
+  }
+
+  function firstSelectablePokemon() {
+    return getSelectablePokemon()[0] || state.pokemon[0];
+  }
+
+  function getSelectablePokemon() {
+    return state.pokemon
+      .filter((pokemon) => isPokemonSelectable(pokemon.name))
+      .sort((a, b) => rankingIndex(a.name) - rankingIndex(b.name) || number(a.no, 9999) - number(b.no, 9999) || a.name.localeCompare(b.name, "ja"));
+  }
+
+  function isPokemonSelectable(name) {
+    const pokemon = state.pokemonByName.get(name);
+    if (!pokemon) return false;
+    if (state.seasonFilter === SEASON_ALL) return true;
+    return pokemon.seasons[state.seasonFilter] === true;
+  }
+
+  function rankingIndex(name) {
+    const direct = state.rankingByPokemon.get(name);
+    if (direct) return direct.rank || 99999;
+    const baseName = state.baseByMega.get(name);
+    const base = baseName ? state.rankingByPokemon.get(baseName) : null;
+    return base?.rank || 99999;
+  }
+
   function render() {
     app.innerHTML = `
       <header class="topbar">
         <div class="brand">
           <p class="rule-line">Lv.50 / IV31固定 / 66pt・1項目32pt</p>
-          <h1>バトルプランナー</h1>
+          <h1>${APP_NAME}</h1>
         </div>
         <div class="header-actions">
           <button class="icon-button" type="button" data-action="sync-calc" aria-label="育成をダメージ計算へ同期">${iconSync()}</button>
+          <button class="text-button compact-button" type="button" data-action="install-app">追加</button>
           <button class="text-button" type="button" data-action="save">保存</button>
         </div>
       </header>
@@ -316,6 +414,7 @@
         ${renderTab("calc", "ダメージ計算")}
         ${renderTab("team", "チーム")}
       </nav>
+      ${renderSeasonFilter()}
       ${renderActiveView()}
       ${renderPokemonDatalist()}
     `;
@@ -329,6 +428,20 @@
     if (state.activeView === "calc") return renderCalcView();
     if (state.activeView === "team") return renderTeamView();
     return renderBuildView();
+  }
+
+  function renderSeasonFilter() {
+    const selectableCount = getSelectablePokemon().length;
+    return `
+      <div class="filter-strip">
+        <label for="season-filter">対象</label>
+        <select id="season-filter" data-field="season-filter">
+          ${option("全体", state.seasonFilter, SEASON_ALL)}
+          ${state.seasonKeys.map((key) => option(key, state.seasonFilter, key)).join("")}
+        </select>
+        <span>${selectableCount}体 / ランキング順</span>
+      </div>
+    `;
   }
 
   function renderBuildView() {
@@ -513,6 +626,7 @@
           <div class="field">
             <label for="${nameField}">ポケモン</label>
             <input id="${nameField}" list="pokemon-options" data-field="${nameField}" value="${escapeAttr(source.name)}" autocomplete="off" />
+            ${renderMegaActions(mode, source.name)}
           </div>
           <div class="field">
             <label for="${natureField}">性格</label>
@@ -680,6 +794,7 @@
           <div class="field">
             <label for="target-name">相手</label>
             <input id="target-name" list="pokemon-options" data-field="calc-defender-name" value="${escapeAttr(state.calc.defenderName)}" autocomplete="off" />
+            ${renderMegaActions("calc-defender", state.calc.defenderName)}
           </div>
           <div class="field">
             <label for="target-nature">性格</label>
@@ -711,8 +826,24 @@
   function renderPokemonDatalist() {
     return `
       <datalist id="pokemon-options">
-        ${state.pokemon.map((pokemon) => `<option value="${escapeAttr(pokemon.name)}"></option>`).join("")}
+        ${getSelectablePokemon().map((pokemon) => `<option value="${escapeAttr(pokemon.name)}"></option>`).join("")}
       </datalist>
+    `;
+  }
+
+  function renderMegaActions(mode, name) {
+    const baseName = state.baseByMega.get(name);
+    if (baseName) {
+      return `<div class="mega-actions"><button class="ghost-button small" type="button" data-action="switch-pokemon" data-mode="${mode}" data-name="${escapeAttr(baseName)}">通常に戻す</button></div>`;
+    }
+
+    const megaEntries = (state.megaByBase.get(name) || []).filter((entry) => state.pokemonByName.has(entry.megaName) && isPokemonSelectable(entry.megaName));
+    if (!megaEntries.length) return "";
+
+    return `
+      <div class="mega-actions">
+        ${megaEntries.map((entry) => `<button class="ghost-button small" type="button" data-action="switch-pokemon" data-mode="${mode}" data-name="${escapeAttr(entry.megaName)}">${megaButtonLabel(entry.megaName)}</button>`).join("")}
+      </div>
     `;
   }
 
@@ -741,6 +872,8 @@
     if (action === "load-build") loadBuild(target.dataset.id, false);
     if (action === "load-build-calc") loadBuild(target.dataset.id, true);
     if (action === "delete-build") deleteBuild(target.dataset.id);
+    if (action === "switch-pokemon") updatePokemon(target.dataset.mode, target.dataset.name);
+    if (action === "install-app") installApp();
   });
 
   document.addEventListener("input", (event) => {
@@ -752,6 +885,15 @@
     if (target.dataset.field === "nickname") {
       state.build.nickname = target.value;
     }
+  });
+
+  document.addEventListener("focusout", (event) => {
+    const target = event.target;
+    if (!target.dataset) return;
+    const field = target.dataset.field;
+    if (field === "build-name") updatePokemon("build", target.value);
+    if (field === "calc-attacker-name") updatePokemon("calc-attacker", target.value);
+    if (field === "calc-defender-name") updatePokemon("calc-defender", target.value);
   });
 
   document.addEventListener("change", (event) => {
@@ -771,6 +913,7 @@
     if (field === "build-ability") state.build.ability = target.value;
     if (field === "weather") state.calc.weather = target.value;
     if (field === "reflect") state.calc.reflect = target.value;
+    if (field === "season-filter") updateSeasonFilter(target.value);
     if (field === "move") {
       const moves = target.dataset.mode === "calc" ? state.calc.moves : state.build.moves;
       moves[Number(target.dataset.slot)] = target.value;
@@ -806,6 +949,11 @@
   function updatePokemon(mode, name) {
     if (!state.pokemonByName.has(name)) {
       showToast("該当するポケモンが見つかりません");
+      render();
+      return;
+    }
+    if (!isPokemonSelectable(name)) {
+      showToast(`${state.seasonFilter}では対象外です`);
       render();
       return;
     }
@@ -866,7 +1014,7 @@
   }
 
   function newBuild() {
-    const name = firstExisting(["ガブリアス", "リザードン", "フシギバナ"]) || state.pokemon[0].name;
+    const name = firstSelectable(["ガブリアス", "リザードン", "フシギバナ"]) || firstSelectablePokemon().name;
     state.build = {
       name,
       nickname: "",
@@ -932,9 +1080,43 @@
     render();
   }
 
+  async function installApp() {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+      if (choice.outcome === "accepted") showToast("ホーム画面に追加しました");
+      deferredInstallPrompt = null;
+      return;
+    }
+    showToast("ブラウザの共有からホーム画面に追加できます");
+  }
+
+  function updateSeasonFilter(value) {
+    state.seasonFilter = value || SEASON_ALL;
+    ensureSelectableState();
+    showToast(`${state.seasonFilter === SEASON_ALL ? "全体" : state.seasonFilter}に切り替えました`);
+  }
+
+  function ensureSelectableState() {
+    const fallback = firstSelectablePokemon();
+    if (!fallback) return;
+    if (!isPokemonSelectable(state.build.name)) {
+      state.build.name = fallback.name;
+      state.build.moves = suggestMoves(fallback.name);
+      state.build.ability = "";
+    }
+    if (!isPokemonSelectable(state.calc.attackerName)) {
+      state.calc.attackerName = fallback.name;
+      state.calc.moves = suggestMoves(fallback.name);
+    }
+    if (!isPokemonSelectable(state.calc.defenderName)) {
+      state.calc.defenderName = firstSelectable(["ブリジュラス", fallback.name]) || fallback.name;
+    }
+  }
+
   function suggestMoves(pokemonName) {
     const moves = getMoves(pokemonName);
-    const rank = state.rankingByPokemon.get(pokemonName);
+    const rank = getRankingForPokemon(pokemonName);
     const rankedNames = rank?.moves?.map((value) => value.replace(/\s*\([^)]*\)\s*$/, "")) || [];
     const candidates = [
       ...rankedNames.map((name) => moves.find((move) => move.name === name)).filter(Boolean),
@@ -1146,12 +1328,19 @@
   function getMoves(name) {
     const ownMoves = state.movesByPokemon.get(name) || [];
     if (ownMoves.length) return ownMoves;
-    const rank = state.rankingByPokemon.get(name);
+    const baseName = state.baseByMega.get(name);
+    const baseMoves = baseName ? state.movesByPokemon.get(baseName) || [] : [];
+    if (baseMoves.length) return baseMoves;
+    const rank = getRankingForPokemon(name);
     const rankedNames = rank?.moves?.map((value) => value.replace(/\s*\([^)]*\)\s*$/, "")) || [];
     const fallback = unique(rankedNames)
       .map((moveName) => state.moveByName.get(moveName))
       .filter(Boolean);
     return fallback;
+  }
+
+  function getRankingForPokemon(name) {
+    return state.rankingByPokemon.get(name) || state.rankingByPokemon.get(state.baseByMega.get(name)) || null;
   }
 
   function findAnyMove(name) {
@@ -1179,6 +1368,11 @@
 
   function renderTypePills(pokemon) {
     return [pokemon.type1, pokemon.type2].filter(Boolean).map(typePill).join("");
+  }
+
+  function megaButtonLabel(name) {
+    const suffix = name.match(/[XY]$/);
+    return suffix ? `メガ${suffix[0]}` : "メガ進化";
   }
 
   function option(label, selected, value = label) {
