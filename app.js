@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const DATA_DIR = "data※使う場合名前変更禁止";
+  const DATA_DIR = "data";
   const LEVEL = 50;
   const IV = 31;
   const POINT_TOTAL = 66;
@@ -18,6 +18,14 @@
     { key: "spd", label: "特防", csv: "特防" },
     { key: "spe", label: "素早", csv: "素早" },
   ];
+
+  const RANK_KEYS = STAT_KEYS.filter((stat) => stat.key !== "hp");
+  const WEATHER_OPTIONS = ["なし", "はれ", "あめ", "すなあらし", "ゆき"];
+  const FIELD_OPTIONS = ["なし", "エレキフィールド", "グラスフィールド", "サイコフィールド", "ミストフィールド"];
+  const STATUS_OPTIONS = ["なし", "やけど", "どく", "まひ", "ねむり", "こおり"];
+  const HP_CONDITION_OPTIONS = ["通常", "満タン", "1/3以下"];
+  const FAINTED_OPTIONS = [0, 1, 2, 3, 4, 5];
+  const defaultRank = () => ({ atk: 0, def: 0, spa: 0, spd: 0, spe: 0 });
 
   const TYPE_CLASS = {
     ノーマル: "normal",
@@ -94,6 +102,7 @@
     pokemon: [],
     moves: [],
     tools: [],
+    characteristics: [],
     mega: [],
     seasonKeys: [],
     seasonFilter: SEASON_ALL,
@@ -101,6 +110,7 @@
     pokemonByName: new Map(),
     moveByName: new Map(),
     moveByKey: new Map(),
+    abilityByName: new Map(),
     megaByBase: new Map(),
     baseByMega: new Map(),
     movesByPokemon: new Map(),
@@ -140,10 +150,11 @@
 
   async function init() {
     try {
-      const [pokemonCsv, moveCsv, toolCsv, megaCsv, rankingJson] = await Promise.all([
+      const [pokemonCsv, moveCsv, toolCsv, characteristicsCsv, megaCsv, rankingJson] = await Promise.all([
         fetchText(`${DATA_DIR}/pokemon.csv`),
         fetchText(`${DATA_DIR}/pokemon_moves.csv`),
         fetchText(`${DATA_DIR}/tool.csv`),
+        fetchText(`${DATA_DIR}/characteristics.csv`),
         fetchText(`${DATA_DIR}/mega.csv`),
         fetchJson(`${DATA_DIR}/season_ranking_single_s2.json`).catch(() => null),
       ]);
@@ -154,9 +165,11 @@
       state.pokemon = pokemonRows.map(normalizePokemon).filter((row) => row.name);
       state.moves = parseCsv(moveCsv).map(normalizeMove).filter((row) => row.pokemon && row.name);
       state.tools = parseCsv(toolCsv).filter((row) => row["名前"]);
+      state.characteristics = parseCsv(characteristicsCsv).filter((row) => row["特性"]);
       state.mega = parseCsv(megaCsv).map(normalizeMega).filter((row) => row.baseName && row.megaName);
       state.ranking = rankingJson;
 
+      state.characteristics.forEach((ability) => state.abilityByName.set(ability["特性"], ability));
       state.pokemon.forEach((pokemon) => state.pokemonByName.set(pokemon.name, pokemon));
       state.moves.forEach((move) => {
         if (!state.moveByName.has(move.name)) state.moveByName.set(move.name, move);
@@ -348,26 +361,39 @@
       name: preferredAttacker,
       nickname: "",
       nature: "ようき",
-      item: "こだわりハチマキ",
-      ability: "",
+      item: "",
+      ability: defaultAbility(preferredAttacker),
       ev: physicalEv(),
       moves: attackerMoves,
+      moveHits: ["", "", "", ""],
       updatedAt: Date.now(),
     };
 
     state.calc = {
       attackerName: preferredAttacker,
       attackerNature: "ようき",
-      attackerItem: "こだわりハチマキ",
+      attackerItem: "",
+      attackerAbility: defaultAbility(preferredAttacker),
       attackerEv: cloneEv(state.build.ev),
+      attackerRank: defaultRank(),
       defenderName: preferredDefender,
       defenderNature: "ずぶとい",
       defenderItem: "",
+      defenderAbility: defaultAbility(preferredDefender),
       defenderEv: bulkyEv(),
+      defenderRank: defaultRank(),
       moves: attackerMoves.slice(),
+      moveHits: ["", "", "", ""],
       weather: "なし",
+      field: "なし",
       reflect: "なし",
+      attackerStatus: "なし",
+      defenderStatus: "なし",
+      attackerHpCondition: "通常",
+      allyFainted: 0,
     };
+    applyPokemonPreset("build", state.build.name, { keepMoves: false });
+    applyPokemonPreset("calc-attacker", state.calc.attackerName, { keepMoves: false });
   }
 
   function firstExisting(names) {
@@ -459,13 +485,23 @@
       attackerNature: state.build.nature,
       attackerEv: state.build.ev,
       attackerItem: state.build.item,
+      attackerAbility: state.build.ability,
+      attackerRank: defaultRank(),
       defenderName: state.calc.defenderName,
       defenderNature: state.calc.defenderNature,
       defenderEv: state.calc.defenderEv,
       defenderItem: state.calc.defenderItem,
+      defenderAbility: state.calc.defenderAbility,
+      defenderRank: state.calc.defenderRank,
       moves: state.build.moves,
+      moveHits: state.build.moveHits || ["", "", "", ""],
       weather: state.calc.weather,
+      field: state.calc.field,
       reflect: state.calc.reflect,
+      attackerStatus: state.calc.attackerStatus,
+      defenderStatus: state.calc.defenderStatus,
+      attackerHpCondition: state.calc.attackerHpCondition,
+      allyFainted: state.calc.allyFainted,
     });
 
     return `
@@ -523,6 +559,7 @@
                 ${renderStatRows("calc-attacker", state.calc.attackerEv, calcStats(getPokemon(state.calc.attackerName), state.calc.attackerEv, state.calc.attackerNature), state.calc.attackerNature)}
               </div>
             </section>
+            ${renderRankPanel("calc-attacker", "攻撃側ランク")}
           </div>
           <div class="view">
             ${renderBasicPanel("calc-defender")}
@@ -533,6 +570,7 @@
                 ${renderStatRows("calc-defender", state.calc.defenderEv, calcStats(getPokemon(state.calc.defenderName), state.calc.defenderEv, state.calc.defenderNature), state.calc.defenderNature)}
               </div>
             </section>
+            ${renderRankPanel("calc-defender", "防御側ランク")}
           </div>
         </div>
         ${renderMovesPanel("calc", state.calc.attackerName, state.calc.moves, results)}
@@ -545,9 +583,13 @@
             <div class="field">
               <label for="weather">天候</label>
               <select id="weather" data-field="weather" class="plain-select">
-                ${option("なし", state.calc.weather)}
-                ${option("はれ", state.calc.weather)}
-                ${option("あめ", state.calc.weather)}
+                ${WEATHER_OPTIONS.map((value) => option(value, state.calc.weather)).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label for="field-condition">フィールド</label>
+              <select id="field-condition" data-field="field-condition" class="plain-select">
+                ${FIELD_OPTIONS.map((value) => option(value, state.calc.field)).join("")}
               </select>
             </div>
             <div class="field">
@@ -556,6 +598,30 @@
                 ${option("なし", state.calc.reflect)}
                 ${option("リフレクター", state.calc.reflect)}
                 ${option("ひかりのかべ", state.calc.reflect)}
+              </select>
+            </div>
+            <div class="field">
+              <label for="attacker-status">攻撃側状態</label>
+              <select id="attacker-status" data-field="attacker-status" class="plain-select">
+                ${STATUS_OPTIONS.map((value) => option(value, state.calc.attackerStatus)).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label for="defender-status">防御側状態</label>
+              <select id="defender-status" data-field="defender-status" class="plain-select">
+                ${STATUS_OPTIONS.map((value) => option(value, state.calc.defenderStatus)).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label for="attacker-hp-condition">攻撃側HP条件</label>
+              <select id="attacker-hp-condition" data-field="attacker-hp-condition" class="plain-select">
+                ${HP_CONDITION_OPTIONS.map((value) => option(value, state.calc.attackerHpCondition)).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label for="ally-fainted">ひんしの味方</label>
+              <select id="ally-fainted" data-field="ally-fainted" class="plain-select">
+                ${FAINTED_OPTIONS.map((value) => option(`${value}体`, String(state.calc.allyFainted), String(value))).join("")}
               </select>
             </div>
           </div>
@@ -616,12 +682,12 @@
     const source = getModeSource(mode);
     const pokemon = getPokemon(source.name);
     const abilities = getAbilityOptions(source.name);
-    const itemOptions = ["", ...state.tools.slice(0, 80).map((tool) => tool["名前"])];
+    const itemOptions = ["", ...state.tools.map((tool) => tool["名前"])];
     const title = mode === "calc-defender" ? "防御側" : mode === "calc-attacker" ? "攻撃側" : "基本情報";
     const nameField = mode === "build" ? "build-name" : mode === "calc-attacker" ? "calc-attacker-name" : "calc-defender-name";
     const natureField = mode === "build" ? "build-nature" : mode === "calc-attacker" ? "calc-attacker-nature" : "calc-defender-nature";
     const itemField = mode === "build" ? "build-item" : mode === "calc-attacker" ? "calc-attacker-item" : "calc-defender-item";
-    const abilityField = mode === "build" ? "build-ability" : "";
+    const abilityField = mode === "build" ? "build-ability" : mode === "calc-attacker" ? "calc-attacker-ability" : "calc-defender-ability";
 
     return `
       <section class="panel">
@@ -649,16 +715,12 @@
                 </div>`
               : ""
           }
-          ${
-            mode === "build"
-              ? `<div class="field">
-                  <label for="${abilityField}">特性</label>
-                  <select id="${abilityField}" data-field="${abilityField}">
-                    ${["", ...abilities].map((ability) => option(ability || "未指定", state.build.ability || "未指定", ability)).join("")}
-                  </select>
-                </div>`
-              : ""
-          }
+          <div class="field">
+            <label for="${abilityField}">特性</label>
+            <select id="${abilityField}" data-field="${abilityField}">
+              ${["", ...abilities].map((ability) => option(ability || "未指定", source.ability || "未指定", ability)).join("")}
+            </select>
+          </div>
           <div class="field">
             <label for="${itemField}">道具</label>
             <select id="${itemField}" data-field="${itemField}">
@@ -708,6 +770,25 @@
     `;
   }
 
+  function renderRankPanel(mode, title) {
+    const ranks = getRankByMode(mode);
+    return `
+      <section class="panel compact rank-panel">
+        <div class="panel-header"><h3>${title}</h3><span class="panel-meta">-6〜+6</span></div>
+        <div class="panel-body rank-grid">
+          ${RANK_KEYS.map((stat) => `
+            <div class="field rank-field">
+              <label for="${mode}-rank-${stat.key}">${stat.label}</label>
+              <select id="${mode}-rank-${stat.key}" data-field="rank" data-mode="${mode}" data-stat="${stat.key}" class="plain-select">
+                ${[-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6].map((value) => option(value > 0 ? `+${value}` : String(value), String(ranks[stat.key] || 0), String(value))).join("")}
+              </select>
+            </div>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
   function renderMovesPanel(mode, pokemonName, moves, results) {
     const available = getMoves(pokemonName);
     const title = mode === "calc" ? "技と計算結果" : "技 (4/4)";
@@ -738,6 +819,7 @@
             ${available.map((candidate) => `<option value="${escapeAttr(candidate.name)}" ${moveKey(candidate.name) === selectedKey ? "selected" : ""}>${escapeHtml(candidate.name)}${candidate.candidate ? " *" : ""}</option>`).join("")}
           </select>
           ${move ? renderMoveMeta(move) : ""}
+          ${move ? renderHitSelector(mode, slot, move) : ""}
         </div>
         <div>
           <div class="${result && result.ok ? "damage-value" : "damage-value damage-empty"}">${resultLabel(result)}</div>
@@ -754,6 +836,20 @@
         <span>${escapeHtml(move.category)}</span>
         <span>威力 ${displayPower(move)}</span>
         ${move.accuracy ? `<span>命中 ${escapeHtml(move.accuracy)}</span>` : ""}
+      </div>
+    `;
+  }
+
+  function renderHitSelector(mode, slot, move) {
+    const options = hitOptionsForMove(move);
+    if (options.length <= 1) return "";
+    const selected = getMoveHitByMode(mode, slot) || String(options[0]);
+    return `
+      <div class="hit-select-wrap">
+        <label for="${mode}-hit-${slot}">連続回数</label>
+        <select id="${mode}-hit-${slot}" class="plain-select hit-select" data-field="move-hit" data-mode="${mode}" data-slot="${slot}">
+          ${options.map((hit) => option(`${hit}回`, selected, String(hit))).join("")}
+        </select>
       </div>
     `;
   }
@@ -932,30 +1028,65 @@
     if (field === "calc-attacker-item") state.calc.attackerItem = target.value;
     if (field === "calc-defender-item") state.calc.defenderItem = target.value;
     if (field === "build-ability") state.build.ability = target.value;
+    if (field === "calc-attacker-ability") state.calc.attackerAbility = target.value;
+    if (field === "calc-defender-ability") state.calc.defenderAbility = target.value;
     if (field === "weather") state.calc.weather = target.value;
+    if (field === "field-condition") state.calc.field = target.value;
     if (field === "reflect") state.calc.reflect = target.value;
+    if (field === "attacker-status") state.calc.attackerStatus = target.value;
+    if (field === "defender-status") state.calc.defenderStatus = target.value;
+    if (field === "attacker-hp-condition") state.calc.attackerHpCondition = target.value;
+    if (field === "ally-fainted") state.calc.allyFainted = number(target.value, 0);
+    if (field === "rank") { setRank(target.dataset.mode, target.dataset.stat, target.value); return; }
+    if (field === "move-hit") {
+      const hits = getMoveHitsByMode(target.dataset.mode);
+      hits[Number(target.dataset.slot)] = target.value;
+    }
     if (field === "season-filter") updateSeasonFilter(target.value);
     if (field === "move") {
       const moves = target.dataset.mode === "calc" ? state.calc.moves : state.build.moves;
-      moves[Number(target.dataset.slot)] = target.value;
+      const slot = Number(target.dataset.slot);
+      moves[slot] = target.value;
+      getMoveHitsByMode(target.dataset.mode)[slot] = "";
     }
     render();
   });
 
   function getModeSource(mode) {
     if (mode === "calc-attacker") {
-      return { name: state.calc.attackerName, nature: state.calc.attackerNature, item: state.calc.attackerItem };
+      return { name: state.calc.attackerName, nature: state.calc.attackerNature, item: state.calc.attackerItem, ability: state.calc.attackerAbility };
     }
     if (mode === "calc-defender") {
-      return { name: state.calc.defenderName, nature: state.calc.defenderNature, item: state.calc.defenderItem };
+      return { name: state.calc.defenderName, nature: state.calc.defenderNature, item: state.calc.defenderItem, ability: state.calc.defenderAbility };
     }
-    return { name: state.build.name, nature: state.build.nature, item: state.build.item };
+    return { name: state.build.name, nature: state.build.nature, item: state.build.item, ability: state.build.ability };
   }
 
   function getEvByMode(mode) {
     if (mode === "calc-attacker") return state.calc.attackerEv;
     if (mode === "calc-defender") return state.calc.defenderEv;
     return state.build.ev;
+  }
+
+  function getRankByMode(mode) {
+    if (mode === "calc-attacker") return state.calc.attackerRank || (state.calc.attackerRank = defaultRank());
+    if (mode === "calc-defender") return state.calc.defenderRank || (state.calc.defenderRank = defaultRank());
+    return defaultRank();
+  }
+
+  function getMoveHitsByMode(mode) {
+    if (mode === "calc") return state.calc.moveHits || (state.calc.moveHits = ["", "", "", ""]);
+    return state.build.moveHits || (state.build.moveHits = ["", "", "", ""]);
+  }
+
+  function getMoveHitByMode(mode, slot) {
+    return getMoveHitsByMode(mode)[Number(slot)] || "";
+  }
+
+  function setRank(mode, stat, value) {
+    const ranks = getRankByMode(mode);
+    ranks[stat] = clamp(number(value, 0), -6, 6);
+    render();
   }
 
   function setPoint(mode, stat, requested, options = {}) {
@@ -1004,13 +1135,18 @@
     if (mode === "build") {
       state.build.name = name;
       state.build.moves = suggestMoves(name);
-      state.build.ability = "";
+      state.build.moveHits = ["", "", "", ""];
+      state.build.ability = defaultAbility(name);
     } else if (mode === "calc-attacker") {
       state.calc.attackerName = name;
+      state.calc.attackerAbility = defaultAbility(name);
       state.calc.moves = suggestMoves(name);
+      state.calc.moveHits = ["", "", "", ""];
     } else {
       state.calc.defenderName = name;
+      state.calc.defenderAbility = defaultAbility(name);
     }
+    applyPokemonPreset(mode, name, { keepMoves: false });
     render();
   }
 
@@ -1018,8 +1154,10 @@
     state.calc.attackerName = state.build.name;
     state.calc.attackerNature = state.build.nature;
     state.calc.attackerItem = state.build.item;
+    state.calc.attackerAbility = state.build.ability || defaultAbility(state.build.name);
     state.calc.attackerEv = cloneEv(state.build.ev);
     state.calc.moves = state.build.moves.slice(0, 4);
+    state.calc.moveHits = (state.build.moveHits || ["", "", "", ""]).slice(0, 4);
     state.activeView = "calc";
     showToast("育成をダメージ計算へ送りました");
     render();
@@ -1029,8 +1167,10 @@
     state.build.name = state.calc.attackerName;
     state.build.nature = state.calc.attackerNature;
     state.build.item = state.calc.attackerItem;
+    state.build.ability = state.calc.attackerAbility || defaultAbility(state.calc.attackerName);
     state.build.ev = cloneEv(state.calc.attackerEv);
     state.build.moves = state.calc.moves.slice(0, 4);
+    state.build.moveHits = (state.calc.moveHits || ["", "", "", ""]).slice(0, 4);
     state.build.updatedAt = Date.now();
     state.activeView = "build";
     showToast("計算値を育成に反映しました");
@@ -1042,17 +1182,24 @@
       name: state.calc.attackerName,
       nature: state.calc.attackerNature,
       item: state.calc.attackerItem,
+      ability: state.calc.attackerAbility,
       ev: cloneEv(state.calc.attackerEv),
+      rank: cloneRank(state.calc.attackerRank),
     };
     state.calc.attackerName = state.calc.defenderName;
     state.calc.attackerNature = state.calc.defenderNature;
     state.calc.attackerItem = state.calc.defenderItem;
+    state.calc.attackerAbility = state.calc.defenderAbility || defaultAbility(state.calc.defenderName);
     state.calc.attackerEv = cloneEv(state.calc.defenderEv);
+    state.calc.attackerRank = cloneRank(state.calc.defenderRank);
     state.calc.defenderName = oldAttacker.name;
     state.calc.defenderNature = oldAttacker.nature;
     state.calc.defenderItem = oldAttacker.item;
+    state.calc.defenderAbility = oldAttacker.ability || defaultAbility(oldAttacker.name);
     state.calc.defenderEv = cloneEv(oldAttacker.ev);
+    state.calc.defenderRank = cloneRank(oldAttacker.rank);
     state.calc.moves = suggestMoves(state.calc.attackerName);
+    state.calc.moveHits = ["", "", "", ""];
     showToast("攻守を入れ替えました");
     render();
   }
@@ -1064,9 +1211,10 @@
       nickname: "",
       nature: "まじめ",
       item: "",
-      ability: "",
+      ability: defaultAbility(name),
       ev: defaultEv(),
       moves: suggestMoves(name),
+      moveHits: ["", "", "", ""],
       updatedAt: Date.now(),
     };
     state.activeView = "build";
@@ -1084,6 +1232,7 @@
       ability: state.build.ability,
       ev: cloneEv(state.build.ev),
       moves: state.build.moves.slice(0, 4),
+      moveHits: (state.build.moveHits || ["", "", "", ""]).slice(0, 4),
       updatedAt: Date.now(),
     };
     state.saved = [snapshot, ...state.saved].slice(0, 24);
@@ -1099,8 +1248,10 @@
       state.calc.attackerName = saved.name;
       state.calc.attackerNature = saved.nature;
       state.calc.attackerItem = saved.item;
+      state.calc.attackerAbility = saved.ability || defaultAbility(saved.name);
       state.calc.attackerEv = cloneEv(saved.ev);
       state.calc.moves = saved.moves.slice(0, 4);
+      state.calc.moveHits = (saved.moveHits || ["", "", "", ""]).slice(0, 4);
       state.activeView = "calc";
     } else {
       state.build = {
@@ -1111,6 +1262,7 @@
         ability: saved.ability,
         ev: cloneEv(saved.ev),
         moves: saved.moves.slice(0, 4),
+        moveHits: (saved.moveHits || ["", "", "", ""]).slice(0, 4),
         updatedAt: Date.now(),
       };
       state.activeView = "build";
@@ -1147,18 +1299,23 @@
     if (!isPokemonSelectable(state.build.name)) {
       state.build.name = fallback.name;
       state.build.moves = suggestMoves(fallback.name);
-      state.build.ability = "";
+      state.build.moveHits = ["", "", "", ""];
+      state.build.ability = defaultAbility(fallback.name);
     }
     if (!isPokemonSelectable(state.calc.attackerName)) {
       state.calc.attackerName = fallback.name;
+      state.calc.attackerAbility = defaultAbility(fallback.name);
       state.calc.moves = suggestMoves(fallback.name);
+      state.calc.moveHits = ["", "", "", ""];
     }
     if (!isPokemonSelectable(state.calc.defenderName)) {
       state.calc.defenderName = firstSelectable(["ブリジュラス", fallback.name]) || fallback.name;
+      state.calc.defenderAbility = defaultAbility(state.calc.defenderName);
     }
   }
 
   function suggestMoves(pokemonName) {
+    if (pokemonName === "メガリザードンX") return ["フレアドライブ", "げきりん", "かみなりパンチ", "りゅうのまい"];
     const moves = getMoves(pokemonName);
     const rank = getRankingForPokemon(pokemonName);
     const rankedNames = getRankedMoveNames(rank);
@@ -1173,21 +1330,38 @@
 
   function calcAllMoves(config) {
     return [0, 1, 2, 3].map((slot) => {
-      const move = findMoveInList(getMoves(config.attackerName), config.moves[slot]) || findAnyMove(config.moves[slot]);
-      return calcMoveDamage(config, move);
+      const move = findMoveInList(getMoves(config.attackerName), config.moves?.[slot]) || findAnyMove(config.moves?.[slot]);
+      return calcMoveDamage(config, move, slot);
     });
   }
 
-  function calcMoveDamage(config, move) {
+  function calcMoveDamage(config, move, slot = 0) {
     if (!move) return { ok: false, move: null, reason: "未選択" };
-    const attacker = getPokemon(config.attackerName);
-    const defender = getPokemon(config.defenderName);
-    const attackerStats = calcStats(attacker, config.attackerEv, config.attackerNature);
-    const defenderStats = calcStats(defender, config.defenderEv, config.defenderNature);
-    const power = resolvePower(move, attacker, defender, attackerStats, defenderStats);
+    const cfg = normalizeCalcConfig(config);
+    const attacker = getPokemon(cfg.attackerName);
+    const defender = getPokemon(cfg.defenderName);
+    const attackerAbility = cfg.attackerAbility || defaultAbility(cfg.attackerName);
+    const defenderAbility = cfg.defenderAbility || defaultAbility(cfg.defenderName);
+    const weather = effectiveWeather(cfg.weather, attackerAbility, defenderAbility);
+    const field = effectiveField(cfg.field, attackerAbility, defenderAbility);
+    const moveType = resolveMoveType(move, attackerAbility, weather);
+    const moveForCalc = { ...move, type: moveType };
 
-    if (move.category === "変化" || !power) {
-      return { ok: false, move, reason: "変化技 / 可変条件外" };
+    if (move.category === "変化") {
+      return { ok: false, move: moveForCalc, reason: "変化技" };
+    }
+    if (isReflectMove(move.name)) {
+      return { ok: false, move: moveForCalc, reason: "反射技は相手技依存" };
+    }
+
+    const baseAttackerStats = calcStats(attacker, cfg.attackerEv, cfg.attackerNature);
+    const baseDefenderStats = calcStats(defender, cfg.defenderEv, cfg.defenderNature);
+    const attackerStats = applyBattleStatModifiers(baseAttackerStats, attacker, "attacker", cfg, moveForCalc, attackerAbility, defenderAbility, weather, field);
+    const defenderStats = applyBattleStatModifiers(baseDefenderStats, defender, "defender", cfg, moveForCalc, defenderAbility, attackerAbility, weather, field);
+    const rawPower = resolvePower(moveForCalc, attacker, defender, attackerStats, defenderStats, cfg, weather);
+
+    if (!rawPower) {
+      return { ok: false, move: moveForCalc, reason: "威力なし / 条件未対応" };
     }
 
     const physical = move.category === "物理";
@@ -1198,35 +1372,137 @@
     if (move.name === "イカサマ") attackStat = defenderStats.atk;
     if (["サイコショック", "サイコブレイク", "しんぴのつるぎ"].includes(move.name)) defenseStat = defenderStats.def;
 
-    const itemModifier = itemDamageModifier(config.attackerItem, move, physical);
-    const weatherModifier = weatherDamageModifier(config.weather, move.type);
-    const wallModifier = wallDamageModifier(config.reflect, move.category);
-    const stab = [attacker.type1, attacker.type2].includes(move.type) ? 1.5 : 1;
-    const type = effectiveness(move.type, defender);
-    const hits = resolveHits(move.hits);
-    const base = Math.floor(Math.floor((((Math.floor((2 * LEVEL) / 5) + 2) * power * attackStat) / defenseStat) / 50) + 2);
+    attackStat = applyRuinAttackModifier(attackStat, physical, defenderAbility);
+    defenseStat = applyRuinDefenseModifier(defenseStat, physical, attackerAbility);
+
+    const type = effectiveness(moveType, defender, attackerAbility, defenderAbility);
+    const selectedHits = resolveHits(moveForCalc, cfg.moveHits?.[slot]);
+    const powers = resolvePowerList(moveForCalc, rawPower, selectedHits);
+    const powerModifier = attackerPowerModifier(attackerAbility, moveForCalc, rawPower, type, cfg, weather, field);
+    const itemModifier = itemDamageModifier(cfg.attackerItem, moveForCalc, physical);
+    const fieldModifier = fieldDamageModifier(field, moveForCalc, defender);
+    const weatherModifier = weatherDamageModifier(weather, moveType);
+    const wallModifier = wallDamageModifier(cfg.reflect, move.category);
+    const abilityFinalModifier = abilityFinalDamageModifier(attackerAbility, defenderAbility, moveForCalc, type, cfg, weather);
+    const defensiveItemModifier = defensiveItemModifierForMove(cfg.defenderItem, moveForCalc, type, defenderAbility);
+    const burnModifier = burnDamageModifier(cfg.attackerStatus, attackerAbility, moveForCalc, physical);
+    const stab = stabModifier(attacker, moveType, attackerAbility);
+    const notes = [];
 
     const values = [];
     for (let random = 85; random <= 100; random += 1) {
-      const damage = Math.floor(base * stab * type * itemModifier * weatherModifier * wallModifier * (random / 100)) * hits;
-      values.push(Math.max(1, damage));
+      const total = powers.reduce((sum, power) => {
+        const adjustedPower = Math.max(1, Math.floor(power * powerModifier));
+        const base = Math.floor(Math.floor((((Math.floor((2 * LEVEL) / 5) + 2) * adjustedPower * Math.max(1, attackStat)) / Math.max(1, defenseStat)) / 50) + 2);
+        if (type === 0) return sum;
+        const damage = Math.floor(base * stab * type * itemModifier * weatherModifier * fieldModifier * wallModifier * abilityFinalModifier * defensiveItemModifier * burnModifier * (random / 100));
+        return sum + Math.max(1, damage);
+      }, 0);
+      values.push(total);
     }
 
     const min = Math.min(...values);
     const max = Math.max(...values);
     const hp = defenderStats.hp;
+    if (moveType !== move.type) notes.push(`${move.type}→${moveType}`);
+    if (selectedHits > 1) notes.push(`${selectedHits}hit`);
+    if (weather !== "なし") notes.push(weather);
+    if (field !== "なし") notes.push(field.replace("フィールド", "F"));
+
     return {
       ok: true,
-      move,
+      move: moveForCalc,
       min,
       max,
       minPct: (min / hp) * 100,
       maxPct: (max / hp) * 100,
-      hits,
-      power,
+      hits: selectedHits,
+      power: rawPower,
       type,
-      note: koNote(min, max, hp, type, hits),
+      note: koNote(min, max, hp, type, selectedHits, notes),
     };
+  }
+
+  function normalizeCalcConfig(config) {
+    return {
+      attackerName: config.attackerName,
+      attackerNature: config.attackerNature || "まじめ",
+      attackerItem: config.attackerItem || "",
+      attackerAbility: config.attackerAbility || "",
+      attackerEv: config.attackerEv || defaultEv(),
+      attackerRank: config.attackerRank || defaultRank(),
+      defenderName: config.defenderName,
+      defenderNature: config.defenderNature || "まじめ",
+      defenderItem: config.defenderItem || "",
+      defenderAbility: config.defenderAbility || "",
+      defenderEv: config.defenderEv || defaultEv(),
+      defenderRank: config.defenderRank || defaultRank(),
+      moves: config.moves || [],
+      moveHits: config.moveHits || ["", "", "", ""],
+      weather: config.weather || "なし",
+      field: config.field || "なし",
+      reflect: config.reflect || "なし",
+      attackerStatus: config.attackerStatus || "なし",
+      defenderStatus: config.defenderStatus || "なし",
+      attackerHpCondition: config.attackerHpCondition || "通常",
+      allyFainted: number(config.allyFainted, 0),
+    };
+  }
+
+  function applyBattleStatModifiers(stats, pokemon, role, cfg, move, ownAbility, otherAbility, weather, field) {
+    const result = { ...stats };
+    const item = role === "attacker" ? cfg.attackerItem : cfg.defenderItem;
+    const status = role === "attacker" ? cfg.attackerStatus : cfg.defenderStatus;
+    const ranks = role === "attacker" ? cfg.attackerRank : cfg.defenderRank;
+
+    if (item === "でんきだま" && pokemon.name === "ピカチュウ") {
+      result.atk = Math.floor(result.atk * 2);
+      result.spa = Math.floor(result.spa * 2);
+    }
+    if (item === "こだわりスカーフ") result.spe = Math.floor(result.spe * 1.5);
+
+    if (role === "attacker") {
+      if (["ちからもち", "ヨガパワー"].includes(ownAbility)) result.atk = Math.floor(result.atk * 2);
+      if (["はりきり", "ごりむちゅう"].includes(ownAbility)) result.atk = Math.floor(result.atk * 1.5);
+      if (ownAbility === "こんじょう" && status !== "なし") result.atk = Math.floor(result.atk * 1.5);
+      if (ownAbility === "サンパワー" && weather === "はれ") result.spa = Math.floor(result.spa * 1.5);
+      if (ownAbility === "ハドロンエンジン" && field === "エレキフィールド") result.spa = Math.floor(result.spa * (4 / 3));
+      if (ownAbility === "ひひいろのこどう" && weather === "はれ") result.atk = Math.floor(result.atk * (4 / 3));
+      if (ownAbility === "フラワーギフト" && weather === "はれ") result.atk = Math.floor(result.atk * 1.5);
+    } else {
+      if (ownAbility === "ふしぎなうろこ" && status !== "なし") result.def = Math.floor(result.def * 1.5);
+      if (ownAbility === "くさのけがわ" && field === "グラスフィールド") result.def = Math.floor(result.def * 1.5);
+      if (ownAbility === "フラワーギフト" && weather === "はれ") result.spd = Math.floor(result.spd * 1.5);
+    }
+
+    if (weather === "あめ" && ownAbility === "すいすい") result.spe = Math.floor(result.spe * 2);
+    if (weather === "はれ" && ownAbility === "ようりょくそ") result.spe = Math.floor(result.spe * 2);
+    if (weather === "すなあらし" && ownAbility === "すなかき") result.spe = Math.floor(result.spe * 2);
+    if (weather === "ゆき" && ownAbility === "ゆきかき") result.spe = Math.floor(result.spe * 2);
+    if (field === "エレキフィールド" && ownAbility === "サーフテール") result.spe = Math.floor(result.spe * 2);
+
+    RANK_KEYS.forEach((stat) => {
+      result[stat.key] = Math.max(1, Math.floor(result[stat.key] * rankModifier(number(ranks?.[stat.key], 0))));
+    });
+
+    return result;
+  }
+
+  function rankModifier(stage) {
+    const value = clamp(number(stage, 0), -6, 6);
+    return value >= 0 ? (2 + value) / 2 : 2 / (2 - value);
+  }
+
+  function applyRuinAttackModifier(value, physical, defenderAbility) {
+    if (physical && defenderAbility === "わざわいのおふだ") return Math.floor(value * 0.75);
+    if (!physical && defenderAbility === "わざわいのうつわ") return Math.floor(value * 0.75);
+    return value;
+  }
+
+  function applyRuinDefenseModifier(value, physical, attackerAbility) {
+    if (physical && attackerAbility === "わざわいのつるぎ") return Math.floor(value * 0.75);
+    if (!physical && attackerAbility === "わざわいのたま") return Math.floor(value * 0.75);
+    return value;
   }
 
   function calcStats(pokemon, ev, natureName) {
@@ -1250,13 +1526,70 @@
     return Math.round((clamp(points, 0, POINT_MAX) / POINT_MAX) * 252);
   }
 
-  function resolvePower(move, attacker, defender, attackerStats, defenderStats) {
-    if (move.power) return move.power;
-    if (["くさむすび", "けたぐり"].includes(move.name)) return weightPower(defender.weight);
-    if (["ヒートスタンプ", "ヘビーボンバー"].includes(move.name)) return heavyPower(attacker.weight, defender.weight);
-    if (move.name === "ジャイロボール") return Math.min(150, Math.max(1, Math.floor((25 * defenderStats.spe) / Math.max(1, attackerStats.spe)) + 1));
-    if (move.name === "エレキボール") return electroBallPower(attackerStats.spe, defenderStats.spe);
-    return 0;
+  function resolvePower(move, attacker, defender, attackerStats, defenderStats, cfg, weather) {
+    const name = move.name;
+    if (name === "おはかまいり") return 50 + 50 * clamp(number(cfg.allyFainted, 0), 0, 5);
+    if (["くさむすび", "けたぐり"].includes(name)) return weightPower(defender.weight);
+    if (["ヒートスタンプ", "ヘビーボンバー"].includes(name)) return heavyPower(attacker.weight, defender.weight);
+    if (name === "ジャイロボール") return Math.min(150, Math.max(1, Math.floor((25 * defenderStats.spe) / Math.max(1, attackerStats.spe)) + 1));
+    if (name === "エレキボール") return electroBallPower(attackerStats.spe, defenderStats.spe);
+    if (name === "ウェザーボール") return weather !== "なし" ? 100 : 50;
+    if (name === "アクロバット") return cfg.attackerItem ? 55 : 110;
+    if (name === "からげんき") return cfg.attackerStatus !== "なし" ? 140 : 70;
+    if (name === "ベノムショック") return ["どく"].includes(cfg.defenderStatus) ? 130 : 65;
+    if (name === "たたりめ") return cfg.defenderStatus !== "なし" ? 130 : 65;
+    if (["しおふき", "ふんか", "ドラゴンエナジー"].includes(name)) {
+      if (cfg.attackerHpCondition === "満タン") return 150;
+      if (cfg.attackerHpCondition === "1/3以下") return 50;
+      return move.power || 100;
+    }
+    if (["きしかいせい", "じたばた"].includes(name)) {
+      if (cfg.attackerHpCondition === "1/3以下") return 100;
+      return 20;
+    }
+    if (["ソーラービーム", "ソーラーブレード"].includes(name) && ["あめ", "すなあらし", "ゆき"].includes(weather)) {
+      return Math.max(1, Math.floor((move.power || 120) / 2));
+    }
+    return move.power || 0;
+  }
+
+  function resolveMoveType(move, ability, weather) {
+    if (move.name === "ウェザーボール") {
+      if (weather === "はれ") return "ほのお";
+      if (weather === "あめ") return "みず";
+      if (weather === "ゆき") return "こおり";
+      if (weather === "すなあらし") return "いわ";
+    }
+    if (ability === "ノーマルスキン") return "ノーマル";
+    if (move.type !== "ノーマル") return move.type;
+    const skinTypes = {
+      エレキスキン: "でんき",
+      スカイスキン: "ひこう",
+      フェアリースキン: "フェアリー",
+      フリーズスキン: "こおり",
+      ドラゴンスキン: "ドラゴン",
+    };
+    return skinTypes[ability] || move.type;
+  }
+
+  function effectiveWeather(selected, attackerAbility, defenderAbility) {
+    if (selected && selected !== "なし") return selected;
+    const abilities = [attackerAbility, defenderAbility];
+    if (abilities.some((ability) => ["ひでり", "ひひいろのこどう"].includes(ability))) return "はれ";
+    if (abilities.includes("あめふらし")) return "あめ";
+    if (abilities.includes("すなおこし")) return "すなあらし";
+    if (abilities.includes("ゆきふらし")) return "ゆき";
+    return "なし";
+  }
+
+  function effectiveField(selected, attackerAbility, defenderAbility) {
+    if (selected && selected !== "なし") return selected;
+    const abilities = [attackerAbility, defenderAbility];
+    if (abilities.some((ability) => ["エレキメイカー", "ハドロンエンジン"].includes(ability))) return "エレキフィールド";
+    if (abilities.some((ability) => ["グラスメイカー", "こぼれダネ"].includes(ability))) return "グラスフィールド";
+    if (abilities.includes("サイコメイカー")) return "サイコフィールド";
+    if (abilities.includes("ミストメイカー")) return "ミストフィールド";
+    return "なし";
   }
 
   function weightPower(weight) {
@@ -1286,15 +1619,52 @@
     return 40;
   }
 
-  function resolveHits(text) {
-    if (!text || text === "1") return 1;
-    const match = String(text).match(/\d+/);
-    return match ? number(match[0], 1) : 1;
+  function hitOptionsForMove(move) {
+    if (!move) return [1];
+    const normalized = String(move.hits || "1").normalize("NFKC").replace(/[~～ー−]/g, "-");
+    if (move.name === "ネズミざん") return range(1, 10);
+    const nums = normalized.match(/\d+/g)?.map((value) => number(value, 1)) || [];
+    if (nums.length >= 2 && nums[1] > nums[0]) return range(nums[0], nums[1]);
+    const hit = nums[0] || 1;
+    if (hit > 1 && /途中で外れる|1回目|2回目|3回目/.test(move.description || "")) return range(1, hit);
+    return [hit];
   }
 
-  function effectiveness(moveType, defender) {
+  function resolveHits(move, selected) {
+    const options = hitOptionsForMove(move);
+    const requested = number(selected, options[0] || 1);
+    return options.includes(requested) ? requested : options[0] || 1;
+  }
+
+  function resolvePowerList(move, power, hits) {
+    if (move.name === "トリプルアクセル") return [20, 40, 60].slice(0, hits);
+    if (move.name === "トリプルキック") return [10, 20, 30].slice(0, hits);
+    return Array.from({ length: Math.max(1, hits) }, () => power);
+  }
+
+  function range(min, max) {
+    const list = [];
+    for (let value = min; value <= max; value += 1) list.push(value);
+    return list;
+  }
+
+  function effectiveness(moveType, defender, attackerAbility = "", defenderAbility = "") {
+    if (defenderAbility === "ふゆう" && moveType === "じめん") return 0;
+    if (["ちくでん", "でんきエンジン", "ひらいしん"].includes(defenderAbility) && moveType === "でんき") return 0;
+    if (["ちょすい", "よびみず"].includes(defenderAbility) && moveType === "みず") return 0;
+    if (defenderAbility === "もらいび" && moveType === "ほのお") return 0;
+    if (defenderAbility === "そうしょく" && moveType === "くさ") return 0;
     const chart = TYPE_CHART[moveType] || {};
-    return [defender.type1, defender.type2].filter(Boolean).reduce((value, type) => value * (chart[type] ?? 1), 1);
+    return [defender.type1, defender.type2].filter(Boolean).reduce((value, type) => {
+      if (["きもったま", "しんがん"].includes(attackerAbility) && type === "ゴースト" && ["ノーマル", "かくとう"].includes(moveType)) return value;
+      return value * (chart[type] ?? 1);
+    }, 1);
+  }
+
+  function stabModifier(attacker, moveType, ability) {
+    const hasStab = [attacker.type1, attacker.type2].includes(moveType);
+    if (!hasStab) return 1;
+    return ability === "てきおうりょく" ? 2 : 1.5;
   }
 
   function itemDamageModifier(item, move, physical) {
@@ -1303,26 +1673,38 @@
     if (item === "こだわりメガネ" && !physical) return 1.5;
     if (item === "いのちのたま") return 1.3;
     if (item === "たつじんのおび") return 1.2;
-    const typeBoost = {
-      もくたん: "ほのお",
-      しんぴのしずく: "みず",
-      じしゃく: "でんき",
-      きせきのタネ: "くさ",
-      とけないこおり: "こおり",
-      くろおび: "かくとう",
-      どくバリ: "どく",
-      やわらかいすな: "じめん",
-      するどいくちばし: "ひこう",
-      まがったスプーン: "エスパー",
-      ぎんのこな: "むし",
-      かたいいし: "いわ",
-      のろいのおふだ: "ゴースト",
-      りゅうのキバ: "ドラゴン",
-      くろいメガネ: "あく",
-      メタルコート: "はがね",
-      ようせいのハネ: "フェアリー",
-    };
-    return typeBoost[item] === move.type ? 1.2 : 1;
+    const boostedType = boostedTypeByItem(item);
+    return boostedType === move.type ? 1.2 : 1;
+  }
+
+  function boostedTypeByItem(item) {
+    const row = getTool(item);
+    const text = row?.["効果"] || "";
+    const match = text.match(new RegExp(`(${Object.keys(TYPE_CLASS).join("|")})タイプの技の威力が1\\.2倍`));
+    return match ? match[1] : "";
+  }
+
+  function defensiveItemModifierForMove(item, move, typeEffect, defenderAbility) {
+    if (!item || typeEffect === 0) return 1;
+    const row = getTool(item);
+    const text = row?.["効果"] || "";
+    let targetType = "";
+    let superEffectiveOnly = true;
+    const normalMatch = text.match(/ノーマルタイプの技を受けた時ダメージが半減/);
+    if (normalMatch) {
+      targetType = "ノーマル";
+      superEffectiveOnly = false;
+    } else {
+      const match = text.match(new RegExp(`効果バツグンの(${Object.keys(TYPE_CLASS).join("|")})タイプの技を受けた時ダメージ[がを]半減`));
+      if (match) targetType = match[1];
+    }
+    if (!targetType || targetType !== move.type) return 1;
+    if (superEffectiveOnly && typeEffect <= 1) return 1;
+    return defenderAbility === "じゅくせい" ? 0.25 : 0.5;
+  }
+
+  function getTool(item) {
+    return state.tools.find((tool) => tool["名前"] === item) || null;
   }
 
   function weatherDamageModifier(weather, type) {
@@ -1333,19 +1715,106 @@
     return 1;
   }
 
+  function fieldDamageModifier(field, move, defender) {
+    if (field === "エレキフィールド" && move.type === "でんき") return 1.3;
+    if (field === "グラスフィールド" && move.type === "くさ") return 1.3;
+    if (field === "サイコフィールド" && move.type === "エスパー") return 1.3;
+    if (field === "グラスフィールド" && ["じしん", "じならし", "マグニチュード"].includes(move.name)) return 0.5;
+    if (field === "ミストフィールド" && move.type === "ドラゴン") return 0.5;
+    return 1;
+  }
+
   function wallDamageModifier(wall, category) {
     if (wall === "リフレクター" && category === "物理") return 0.5;
     if (wall === "ひかりのかべ" && category === "特殊") return 0.5;
     return 1;
   }
 
-  function koNote(min, max, hp, type, hits) {
-    if (type === 0) return "無効";
+  function attackerPowerModifier(ability, move, power, typeEffect, cfg, weather, field) {
+    let modifier = 1;
+    if (ability === "テクニシャン" && power <= 60) modifier *= 1.5;
+    if (ability === "すいほう" && move.type === "みず") modifier *= 2;
+    if (ability === "いわはこび" && move.type === "いわ") modifier *= 1.5;
+    if (["はがねつかい", "はがねのせいしん"].includes(ability) && move.type === "はがね") modifier *= 1.5;
+    if (ability === "トランジスタ" && move.type === "でんき") modifier *= 1.3;
+    if (ability === "りゅうのあぎと" && move.type === "ドラゴン") modifier *= 1.5;
+    if (ability === "すなのちから" && weather === "すなあらし" && ["じめん", "いわ", "はがね"].includes(move.type)) modifier *= 1.3;
+    if (ability === "ダークオーラ" && move.type === "あく") modifier *= 4 / 3;
+    if (ability === "フェアリーオーラ" && move.type === "フェアリー") modifier *= 4 / 3;
+    if (ability === "ブレインフォース" && typeEffect > 1) modifier *= 1.25;
+    if (["エレキスキン", "スカイスキン", "フェアリースキン", "フリーズスキン", "ドラゴンスキン", "ノーマルスキン"].includes(ability)) modifier *= 1.2;
+    if (ability === "てつのこぶし" && isPunchMove(move.name)) modifier *= 1.2;
+    if (ability === "がんじょうあご" && isBiteMove(move.name)) modifier *= 1.5;
+    if (ability === "きれあじ" && isCuttingMove(move.name)) modifier *= 1.5;
+    if (ability === "メガランチャー" && isPulseMove(move.name)) modifier *= 1.5;
+    if (ability === "パンクロック" && isSoundMove(move.name)) modifier *= 1.3;
+    if (ability === "すてみ" && isRecoilMove(move.name)) modifier *= 1.2;
+    if (ability === "かたいツメ" && isContactMove(move.name)) modifier *= 1.3;
+    if (ability === "ちからずく" && hasAdditionalEffect(move)) modifier *= 1.3;
+    if (ability === "そうだいしょう") modifier *= 1 + 0.1 * clamp(number(cfg.allyFainted, 0), 0, 5);
+    if (ability === "どくぼうそう" && cfg.attackerStatus === "どく" && move.category === "物理") modifier *= 1.5;
+    if (ability === "ねつぼうそう" && cfg.attackerStatus === "やけど" && move.category === "特殊") modifier *= 1.5;
+    if (cfg.attackerHpCondition === "1/3以下") {
+      if (ability === "もうか" && move.type === "ほのお") modifier *= 1.5;
+      if (ability === "げきりゅう" && move.type === "みず") modifier *= 1.5;
+      if (ability === "しんりょく" && move.type === "くさ") modifier *= 1.5;
+      if (ability === "むしのしらせ" && move.type === "むし") modifier *= 1.5;
+    }
+    return modifier;
+  }
+
+  function abilityFinalDamageModifier(attackerAbility, defenderAbility, move, typeEffect, cfg, weather) {
+    let modifier = 1;
+    if (["ハードロック", "フィルター", "プリズムアーマー"].includes(defenderAbility) && typeEffect > 1) modifier *= 0.75;
+    if (defenderAbility === "あついしぼう" && ["ほのお", "こおり"].includes(move.type)) modifier *= 0.5;
+    if (defenderAbility === "すいほう" && move.type === "ほのお") modifier *= 0.5;
+    if (defenderAbility === "かんそうはだ" && move.type === "ほのお") modifier *= 1.25;
+    if (defenderAbility === "もふもふ" && move.type === "ほのお") modifier *= 2;
+    if (defenderAbility === "もふもふ" && isContactMove(move.name)) modifier *= 0.5;
+    if (defenderAbility === "パンクロック" && isSoundMove(move.name)) modifier *= 0.5;
+    if (attackerAbility === "いろめがね" && typeEffect > 0 && typeEffect < 1) modifier *= 2;
+    return modifier;
+  }
+
+  function burnDamageModifier(status, ability, move, physical) {
+    if (status !== "やけど" || !physical) return 1;
+    if (["こんじょう", "からげんき"].includes(ability) || move.name === "からげんき") return 1;
+    return 0.5;
+  }
+
+  function isReflectMove(name) {
+    return ["カウンター", "ミラーコート", "メタルバースト"].includes(name);
+  }
+
+  const PUNCH_MOVES = new Set(["かみなりパンチ", "ほのおのパンチ", "れいとうパンチ", "きあいパンチ", "ドレインパンチ", "マッハパンチ", "バレットパンチ", "シャドーパンチ", "アームハンマー", "コメットパンチ", "メガトンパンチ", "れんぞくパンチ", "ばくれつパンチ", "グロウパンチ", "ジェットパンチ"]);
+  const BITE_MOVES = new Set(["かみつく", "かみくだく", "ほのおのキバ", "かみなりのキバ", "こおりのキバ", "どくどくのキバ", "サイコファング", "ひっさつまえば", "エラがみ", "くらいつく"]);
+  const CUTTING_MOVES = new Set(["アクアカッター", "エアカッター", "エアスラッシュ", "きりさく", "クロスポイズン", "サイコカッター", "シェルブレード", "シザークロス", "しんぴのつるぎ", "せいなるつるぎ", "ソーラーブレード", "つじぎり", "つばめがえし", "ネズミざん", "はっぱカッター", "リーフブレード", "れんぞくぎり"]);
+  const PULSE_MOVES = new Set(["あくのはどう", "はどうだん", "みずのはどう", "りゅうのはどう", "だいちのはどう", "こんげんのはどう"]);
+  const SOUND_MOVES = new Set(["いにしえのうた", "いびき", "うたかたのアリア", "エコーボイス", "さわぐ", "スケイルノイズ", "チャームボイス", "バークアウト", "ハイパーボイス", "ばくおんぱ", "むしのさざめき", "りんしょう", "オーバードライブ", "フレアソング"]);
+  const RECOIL_MOVES = new Set(["アフロブレイク", "ウッドハンマー", "じごくぐるま", "すてみタックル", "とっしん", "とびげり", "とびひざげり", "もろはのずつき", "フレアドライブ", "ブレイブバード", "ボルテッカー", "ワイルドボルト", "ウェーブタックル", "サンダーダイブ"]);
+  const CONTACT_MOVES = new Set([...PUNCH_MOVES, ...BITE_MOVES, ...CUTTING_MOVES, ...RECOIL_MOVES, "げきりん", "ドラゴンクロー", "シャドークロー", "アクアテール", "アイアンヘッド", "じゃれつく", "とんぼがえり", "インファイト", "けたぐり", "かわらわり",  "かみなりパンチ", "フレアドライブ"]);
+
+  function isPunchMove(name) { return PUNCH_MOVES.has(name); }
+  function isBiteMove(name) { return BITE_MOVES.has(name); }
+  function isCuttingMove(name) { return CUTTING_MOVES.has(name); }
+  function isPulseMove(name) { return PULSE_MOVES.has(name); }
+  function isSoundMove(name) { return SOUND_MOVES.has(name); }
+  function isRecoilMove(name) { return RECOIL_MOVES.has(name); }
+  function isContactMove(name) { return CONTACT_MOVES.has(name); }
+
+  function hasAdditionalEffect(move) {
+    const text = move.description || "";
+    if (/自分の.*下げる|反動|次のターン/.test(text)) return false;
+    return /\d+[%％]の確率|相手を.*状態|ひるませる|下げる/.test(text);
+  }
+
+  function koNote(min, max, hp, type, hits, notes = []) {
+    if (type === 0) return ["無効", ...notes].join(" / ");
     const minHits = Math.max(1, Math.ceil(hp / Math.max(1, max)));
     const maxHits = Math.max(1, Math.ceil(hp / Math.max(1, min)));
-    const range = minHits === maxHits ? `${minHits}発` : `${minHits}-${maxHits}発`;
+    const rangeText = minHits === maxHits ? `${minHits}発` : `${minHits}-${maxHits}発`;
     const typeText = type > 1 ? "抜群" : type < 1 ? "半減" : "等倍";
-    return `${range} / ${typeText}${hits > 1 ? ` / ${hits}hit` : ""}`;
+    return [rangeText, typeText, ...notes].join(" / ");
   }
 
   function resultLabel(result) {
@@ -1361,7 +1830,7 @@
 
   function displayPower(move) {
     if (move.power) return move.power;
-    if (["くさむすび", "けたぐり", "ヒートスタンプ", "ヘビーボンバー", "ジャイロボール", "エレキボール"].includes(move.name)) return "可変";
+    if (["くさむすび", "けたぐり", "ヒートスタンプ", "ヘビーボンバー", "ジャイロボール", "エレキボール", "おはかまいり"].includes(move.name)) return "可変";
     return "—";
   }
 
@@ -1424,6 +1893,102 @@
     return unique([...rankingAbilities, ...baseAbilities]);
   }
 
+  function defaultAbility(pokemonName) {
+    const options = getAbilityOptions(pokemonName);
+    return options[0] || "";
+  }
+
+  function applyPokemonPreset(mode, name, options = {}) {
+    const keepMoves = options.keepMoves === true;
+    const targetIsAttacker = mode === "build" || mode === "calc-attacker";
+    const setBuild = (patch) => Object.assign(state.build, patch);
+    const setCalcAttacker = (patch) => {
+      if (patch.nature !== undefined) state.calc.attackerNature = patch.nature;
+      if (patch.item !== undefined) state.calc.attackerItem = patch.item;
+      if (patch.ability !== undefined) state.calc.attackerAbility = patch.ability;
+      if (patch.ev !== undefined) state.calc.attackerEv = cloneEv(patch.ev);
+      if (patch.moves !== undefined) state.calc.moves = patch.moves.slice(0, 4);
+      if (patch.moveHits !== undefined) state.calc.moveHits = patch.moveHits.slice(0, 4);
+    };
+    const setCalcDefender = (patch) => {
+      if (patch.item !== undefined) state.calc.defenderItem = patch.item;
+      if (patch.ability !== undefined) state.calc.defenderAbility = patch.ability;
+    };
+    const apply = mode === "build" ? setBuild : mode === "calc-attacker" ? setCalcAttacker : setCalcDefender;
+
+    if (name === "メガリザードンX") {
+      const patch = {
+        item: "リザードナイトX",
+        ability: defaultAbility(name),
+      };
+      if (targetIsAttacker) {
+        patch.nature = "いじっぱり";
+        patch.ev = { hp: 2, atk: 32, def: 0, spa: 0, spd: 0, spe: 32 };
+        if (!keepMoves) {
+          patch.moves = ["フレアドライブ", "げきりん", "かみなりパンチ", "りゅうのまい"];
+          patch.moveHits = ["", "", "", ""];
+        }
+      }
+      apply(patch);
+      return;
+    }
+
+    if (name === "メガリザードンY") {
+      const patch = {
+        item: "リザードナイトY",
+        ability: defaultAbility(name),
+      };
+      if (targetIsAttacker && !keepMoves) {
+        patch.moves = suggestCharizardYMoves();
+        patch.moveHits = ["", "", "", ""];
+      }
+      apply(patch);
+      return;
+    }
+
+    if (state.baseByMega.has(name)) {
+      const stone = megaStoneForPokemon(name);
+      const patch = { ability: defaultAbility(name) };
+      if (stone) patch.item = stone;
+      apply(patch);
+    }
+  }
+
+  function suggestCharizardYMoves() {
+    const moves = getMoves("メガリザードンY");
+    const priority = ["ソーラービーム", "かえんほうしゃ", "だいもんじ", "エアスラッシュ", "ぼうふう", "オーバーヒート"];
+    const selected = [];
+    priority.forEach((name) => {
+      const move = findMoveInList(moves, name);
+      if (move && !selected.includes(move.name)) selected.push(move.name);
+    });
+    getRankedMoveNames(getRankingForPokemon("メガリザードンY")).forEach((name) => {
+      const move = findMoveInList(moves, name);
+      if (move && move.category === "特殊" && !selected.includes(move.name)) selected.push(move.name);
+    });
+    moves.forEach((move) => {
+      if (move.category === "特殊" && !selected.includes(move.name)) selected.push(move.name);
+    });
+    return selected.slice(0, 4);
+  }
+
+  function megaStoneForPokemon(name) {
+    const custom = {
+      メガリザードンX: "リザードナイトX",
+      メガリザードンY: "リザードナイトY",
+      メガフシギバナ: "フシギバナイト",
+      メガカメックス: "カメックスナイト",
+    };
+    if (custom[name]) return custom[name];
+    const baseName = state.baseByMega.get(name);
+    if (!baseName) return "";
+    const guessed = `${baseName}ナイト`;
+    if (state.tools.some((tool) => tool["名前"] === guessed)) return guessed;
+    const normalizedBase = baseName.replace(/[ー\s]/g, "");
+    const row = state.tools.find((tool) => tool["名前"].includes(normalizedBase.slice(0, 3)) && tool["名前"].endsWith("ナイト"));
+    return row?.["名前"] || "";
+  }
+
   function stripUsageText(value) {
     return String(value || "")
       .replace(/\s*[（(][^）)]*[）)]\s*$/, "")
@@ -1477,8 +2042,12 @@
     return STAT_KEYS.reduce((sum, stat) => sum + number(ev[stat.key], 0), 0);
   }
 
-  function cloneEv(ev) {
+  function cloneEv(ev = {}) {
     return { hp: ev.hp || 0, atk: ev.atk || 0, def: ev.def || 0, spa: ev.spa || 0, spd: ev.spd || 0, spe: ev.spe || 0 };
+  }
+
+  function cloneRank(rank = {}) {
+    return { atk: rank.atk || 0, def: rank.def || 0, spa: rank.spa || 0, spd: rank.spd || 0, spe: rank.spe || 0 };
   }
 
   function unique(values) {

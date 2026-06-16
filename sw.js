@@ -1,4 +1,4 @@
-const CACHE_NAME = "damage-build-note-v4";
+const CACHE_NAME = "damage-build-note-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,11 +10,12 @@ const APP_SHELL = [
   "./assets/icons/icon-512.png",
   "./assets/icons/maskable-512.png",
   "./assets/icons/apple-touch-icon.png",
-  "./data※使う場合名前変更禁止/pokemon.csv",
-  "./data※使う場合名前変更禁止/pokemon_moves.csv",
-  "./data※使う場合名前変更禁止/tool.csv",
-  "./data※使う場合名前変更禁止/mega.csv",
-  "./data※使う場合名前変更禁止/season_ranking_single_s2.json"
+  "./data/pokemon.csv",
+  "./data/pokemon_moves.csv",
+  "./data/tool.csv",
+  "./data/characteristics.csv",
+  "./data/mega.csv",
+  "./data/season_ranking_single_s2.json"
 ];
 
 self.addEventListener("install", (event) => {

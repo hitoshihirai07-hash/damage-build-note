@@ -814,3 +814,48 @@ button {
     font-size: 18px;
   }
 }
+
+.rank-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rank-field select {
+  min-height: 38px;
+  padding: 0 8px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.hit-select-wrap {
+  display: grid;
+  grid-template-columns: auto minmax(76px, 120px);
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.hit-select {
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+@media (max-width: 430px) {
+  .rank-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .move-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .move-row > div:last-child {
+    grid-column: 2 / -1;
+    justify-self: end;
+  }
+}
