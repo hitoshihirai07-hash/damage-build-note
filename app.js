@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const DATA_DIR = "data#U203b#U4f7f#U3046#U5834#U5408#U540d#U524d#U5909#U66f4#U7981#U6b62";
+  const DATA_DIR = "data※使う場合名前変更禁止";
   const LEVEL = 50;
   const IV = 31;
   const POINT_TOTAL = 66;
@@ -336,8 +336,12 @@
   }
 
   function createInitialState() {
-    const preferredAttacker = firstSelectable(["ガブリアス", "リザードン", "フシギバナ"]) || firstSelectablePokemon().name;
-    const preferredDefender = firstSelectable(["ブリジュラス", "カメックス", "フシギバナ"]) || firstSelectablePokemon().name || preferredAttacker;
+    const fallbackPokemon = firstSelectablePokemon();
+    if (!fallbackPokemon || !fallbackPokemon.name) {
+      throw new Error("ポケモンデータを読み込めませんでした。dataフォルダ名とpokemon.csvを確認してください。");
+    }
+    const preferredAttacker = firstSelectable(["ガブリアス", "リザードン", "フシギバナ"]) || fallbackPokemon.name;
+    const preferredDefender = firstSelectable(["ブリジュラス", "カメックス", "フシギバナ"]) || fallbackPokemon.name || preferredAttacker;
     const attackerMoves = suggestMoves(preferredAttacker);
 
     state.build = {
@@ -1452,6 +1456,7 @@
   }
 
   function renderTypePills(pokemon) {
+    if (!pokemon) return "";
     return [pokemon.type1, pokemon.type2].filter(Boolean).map(typePill).join("");
   }
 
