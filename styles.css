@@ -859,3 +859,195 @@ button {
     justify-self: end;
   }
 }
+
+/* ダメージ計算：スマホ操作向けの上部結果・小タブ・技検索 */
+.calc-view {
+  align-items: start;
+}
+
+.calc-result-dock {
+  position: sticky;
+  top: calc(106px + env(safe-area-inset-top));
+  z-index: 16;
+  box-shadow: 0 10px 24px rgba(31, 45, 60, 0.12);
+}
+
+.compact-header {
+  min-height: 42px;
+  padding: 8px 12px;
+}
+
+.compact-result-body {
+  padding: 10px;
+}
+
+.result-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.result-chip {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.result-chip:active {
+  transform: translateY(1px);
+}
+
+.result-chip-title {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-chip strong {
+  overflow: hidden;
+  color: var(--red);
+  font-size: 13px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-chip strong.damage-empty {
+  color: var(--muted);
+}
+
+.result-chip small {
+  overflow: hidden;
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calc-subtabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 6px 16px rgba(31, 45, 60, 0.06);
+}
+
+.calc-subtab-button {
+  min-height: 40px;
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.calc-subtab-button[aria-selected="true"] {
+  color: #fff;
+  background: var(--blue);
+}
+
+.calc-section-panel {
+  margin-top: 0;
+}
+
+.move-search {
+  width: 100%;
+  min-height: var(--tap);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 0 12px;
+  color: var(--ink);
+  background: #fff;
+  font-weight: 800;
+}
+
+.move-search:focus {
+  outline: 3px solid rgba(17, 103, 232, 0.18);
+  border-color: var(--blue);
+}
+
+.move-select-wrap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.move-select-caption {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 720px) {
+  .calc-result-dock {
+    top: calc(104px + env(safe-area-inset-top));
+  }
+
+  .result-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calc-subtabs {
+    position: sticky;
+    top: calc(236px + env(safe-area-inset-top));
+    z-index: 15;
+  }
+}
+
+@media (max-width: 430px) {
+  .compact-header .panel-meta {
+    display: none;
+  }
+
+  .calc-result-dock {
+    top: calc(100px + env(safe-area-inset-top));
+  }
+
+  .result-chip {
+    min-height: 58px;
+    padding: 7px;
+  }
+
+  .result-chip strong {
+    font-size: 12px;
+  }
+
+  .calc-subtabs {
+    top: calc(224px + env(safe-area-inset-top));
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .calc-subtab-button {
+    min-height: 38px;
+    font-size: 12px;
+  }
+}

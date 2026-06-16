@@ -99,6 +99,7 @@
 
   const state = {
     activeView: "build",
+    calcSection: "moves",
     pokemon: [],
     moves: [],
     tools: [],
@@ -531,7 +532,7 @@
   function renderCalcView() {
     const results = calcAllMoves(state.calc);
     return `
-      <main class="view">
+      <main class="view calc-view">
         <section class="panel">
           <div class="panel-header">
             <h2>ダメージ計算</h2>
@@ -549,88 +550,154 @@
             </div>
           </div>
         </section>
-        <div class="calc-grid">
-          <div class="view">
-            ${renderBasicPanel("calc-attacker")}
-            <section class="panel compact">
-              <div class="panel-header"><h3>攻撃側ステータス</h3><span class="panel-meta" data-point-remaining="calc-attacker">残り ${POINT_TOTAL - totalPoints(state.calc.attackerEv)} / ${POINT_TOTAL}</span></div>
-              <div class="panel-body">
-                ${renderPointSummary("calc-attacker", state.calc.attackerEv)}
-                ${renderStatRows("calc-attacker", state.calc.attackerEv, calcStats(getPokemon(state.calc.attackerName), state.calc.attackerEv, state.calc.attackerNature), state.calc.attackerNature)}
-              </div>
-            </section>
-            ${renderRankPanel("calc-attacker", "攻撃側ランク")}
-          </div>
-          <div class="view">
-            ${renderBasicPanel("calc-defender")}
-            <section class="panel compact">
-              <div class="panel-header"><h3>防御側ステータス</h3><span class="panel-meta" data-point-remaining="calc-defender">残り ${POINT_TOTAL - totalPoints(state.calc.defenderEv)} / ${POINT_TOTAL}</span></div>
-              <div class="panel-body">
-                ${renderPointSummary("calc-defender", state.calc.defenderEv)}
-                ${renderStatRows("calc-defender", state.calc.defenderEv, calcStats(getPokemon(state.calc.defenderName), state.calc.defenderEv, state.calc.defenderNature), state.calc.defenderNature)}
-              </div>
-            </section>
-            ${renderRankPanel("calc-defender", "防御側ランク")}
-          </div>
-        </div>
-        ${renderMovesPanel("calc", state.calc.attackerName, state.calc.moves, results)}
-        <section class="panel">
-          <div class="panel-header">
-            <h2>条件</h2>
-            <span class="panel-meta">簡易補正</span>
-          </div>
-          <div class="panel-body field-grid">
-            <div class="field">
-              <label for="weather">天候</label>
-              <select id="weather" data-field="weather" class="plain-select">
-                ${WEATHER_OPTIONS.map((value) => option(value, state.calc.weather)).join("")}
-              </select>
-            </div>
-            <div class="field">
-              <label for="field-condition">フィールド</label>
-              <select id="field-condition" data-field="field-condition" class="plain-select">
-                ${FIELD_OPTIONS.map((value) => option(value, state.calc.field)).join("")}
-              </select>
-            </div>
-            <div class="field">
-              <label for="reflect">壁</label>
-              <select id="reflect" data-field="reflect" class="plain-select">
-                ${option("なし", state.calc.reflect)}
-                ${option("リフレクター", state.calc.reflect)}
-                ${option("ひかりのかべ", state.calc.reflect)}
-              </select>
-            </div>
-            <div class="field">
-              <label for="attacker-status">攻撃側状態</label>
-              <select id="attacker-status" data-field="attacker-status" class="plain-select">
-                ${STATUS_OPTIONS.map((value) => option(value, state.calc.attackerStatus)).join("")}
-              </select>
-            </div>
-            <div class="field">
-              <label for="defender-status">防御側状態</label>
-              <select id="defender-status" data-field="defender-status" class="plain-select">
-                ${STATUS_OPTIONS.map((value) => option(value, state.calc.defenderStatus)).join("")}
-              </select>
-            </div>
-            <div class="field">
-              <label for="attacker-hp-condition">攻撃側HP条件</label>
-              <select id="attacker-hp-condition" data-field="attacker-hp-condition" class="plain-select">
-                ${HP_CONDITION_OPTIONS.map((value) => option(value, state.calc.attackerHpCondition)).join("")}
-              </select>
-            </div>
-            <div class="field">
-              <label for="ally-fainted">ひんしの味方</label>
-              <select id="ally-fainted" data-field="ally-fainted" class="plain-select">
-                ${FAINTED_OPTIONS.map((value) => option(`${value}体`, String(state.calc.allyFainted), String(value))).join("")}
-              </select>
-            </div>
-          </div>
-        </section>
+        ${renderCalcResultDock(results)}
+        ${renderCalcSubTabs()}
+        ${renderCalcSection(results)}
         <div class="wide-actions">
           <button class="primary-button" type="button" data-action="apply-calc">攻撃側を育成へ反映</button>
           <button class="primary-button secondary" type="button" data-action="save">保存</button>
         </div>
       </main>
+    `;
+  }
+
+  function renderCalcResultDock(results) {
+    return `
+      <section class="panel calc-result-dock">
+        <div class="panel-header compact-header">
+          <h2>計算結果</h2>
+          <span class="panel-meta">上に固定 / タップで技へ</span>
+        </div>
+        <div class="panel-body compact-result-body">
+          <div class="result-strip">
+            ${[0, 1, 2, 3].map((slot) => renderCalcResultChip(slot, results[slot])).join("")}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderCalcResultChip(slot, result) {
+    const move = result?.move;
+    const name = move?.name || "未選択";
+    return `
+      <button class="result-chip" type="button" data-action="calc-section" data-section="moves">
+        <span class="result-chip-title">${slot + 1}. ${escapeHtml(name)}</span>
+        <strong class="${result && result.ok ? "" : "damage-empty"}">${resultLabel(result)}</strong>
+        <small>${escapeHtml(resultNote(result) || "技を選択")}</small>
+      </button>
+    `;
+  }
+
+  function renderCalcSubTabs() {
+    const tabs = [
+      ["moves", "技・結果"],
+      ["attacker", "攻撃側"],
+      ["defender", "防御側"],
+      ["condition", "条件"],
+    ];
+    return `
+      <nav class="calc-subtabs" aria-label="ダメージ計算の切り替え">
+        ${tabs.map(([key, label]) => renderCalcSubTab(key, label)).join("")}
+      </nav>
+    `;
+  }
+
+  function renderCalcSubTab(key, label) {
+    const active = (state.calcSection || "moves") === key;
+    return `<button class="calc-subtab-button" type="button" data-action="calc-section" data-section="${key}" aria-selected="${active}">${label}</button>`;
+  }
+
+  function renderCalcSection(results) {
+    const section = state.calcSection || "moves";
+    if (section === "attacker") {
+      return `
+        <div class="view calc-section-panel">
+          ${renderBasicPanel("calc-attacker")}
+          <section class="panel compact">
+            <div class="panel-header"><h3>攻撃側ステータス</h3><span class="panel-meta" data-point-remaining="calc-attacker">残り ${POINT_TOTAL - totalPoints(state.calc.attackerEv)} / ${POINT_TOTAL}</span></div>
+            <div class="panel-body">
+              ${renderPointSummary("calc-attacker", state.calc.attackerEv)}
+              ${renderStatRows("calc-attacker", state.calc.attackerEv, calcStats(getPokemon(state.calc.attackerName), state.calc.attackerEv, state.calc.attackerNature), state.calc.attackerNature)}
+            </div>
+          </section>
+          ${renderRankPanel("calc-attacker", "攻撃側ランク")}
+        </div>
+      `;
+    }
+    if (section === "defender") {
+      return `
+        <div class="view calc-section-panel">
+          ${renderBasicPanel("calc-defender")}
+          <section class="panel compact">
+            <div class="panel-header"><h3>防御側ステータス</h3><span class="panel-meta" data-point-remaining="calc-defender">残り ${POINT_TOTAL - totalPoints(state.calc.defenderEv)} / ${POINT_TOTAL}</span></div>
+            <div class="panel-body">
+              ${renderPointSummary("calc-defender", state.calc.defenderEv)}
+              ${renderStatRows("calc-defender", state.calc.defenderEv, calcStats(getPokemon(state.calc.defenderName), state.calc.defenderEv, state.calc.defenderNature), state.calc.defenderNature)}
+            </div>
+          </section>
+          ${renderRankPanel("calc-defender", "防御側ランク")}
+        </div>
+      `;
+    }
+    if (section === "condition") return renderConditionPanel();
+    return renderMovesPanel("calc", state.calc.attackerName, state.calc.moves, results);
+  }
+
+  function renderConditionPanel() {
+    return `
+      <section class="panel">
+        <div class="panel-header">
+          <h2>条件</h2>
+          <span class="panel-meta">天候・壁・状態など</span>
+        </div>
+        <div class="panel-body field-grid">
+          <div class="field">
+            <label for="weather">天候</label>
+            <select id="weather" data-field="weather" class="plain-select">
+              ${WEATHER_OPTIONS.map((value) => option(value, state.calc.weather)).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="field-condition">フィールド</label>
+            <select id="field-condition" data-field="field-condition" class="plain-select">
+              ${FIELD_OPTIONS.map((value) => option(value, state.calc.field)).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="reflect">壁</label>
+            <select id="reflect" data-field="reflect" class="plain-select">
+              ${option("なし", state.calc.reflect)}
+              ${option("リフレクター", state.calc.reflect)}
+              ${option("ひかりのかべ", state.calc.reflect)}
+            </select>
+          </div>
+          <div class="field">
+            <label for="attacker-status">攻撃側状態</label>
+            <select id="attacker-status" data-field="attacker-status" class="plain-select">
+              ${STATUS_OPTIONS.map((value) => option(value, state.calc.attackerStatus)).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="defender-status">防御側状態</label>
+            <select id="defender-status" data-field="defender-status" class="plain-select">
+              ${STATUS_OPTIONS.map((value) => option(value, state.calc.defenderStatus)).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="attacker-hp-condition">攻撃側HP条件</label>
+            <select id="attacker-hp-condition" data-field="attacker-hp-condition" class="plain-select">
+              ${HP_CONDITION_OPTIONS.map((value) => option(value, state.calc.attackerHpCondition)).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="ally-fainted">ひんしの味方</label>
+            <select id="ally-fainted" data-field="ally-fainted" class="plain-select">
+              ${FAINTED_OPTIONS.map((value) => option(`${value}体`, String(state.calc.allyFainted), String(value))).join("")}
+            </select>
+          </div>
+        </div>
+      </section>
     `;
   }
 
@@ -810,14 +877,23 @@
   function renderMoveSlot(mode, slot, selected, available, result) {
     const move = findMoveInList(available, selected) || findAnyMove(selected);
     const selectedKey = moveKey(selected);
+    const listId = `${mode}-move-options-${slot}`;
     return `
       <div class="move-row">
         <span class="slot-index">${slot + 1}</span>
         <div class="move-main">
-          <select class="move-select" data-field="move" data-mode="${mode}" data-slot="${slot}">
-            <option value="">技を選択</option>
-            ${available.map((candidate) => `<option value="${escapeAttr(candidate.name)}" ${moveKey(candidate.name) === selectedKey ? "selected" : ""}>${escapeHtml(candidate.name)}${candidate.candidate ? " *" : ""}</option>`).join("")}
-          </select>
+          <label class="sr-only" for="${mode}-move-search-${slot}">技${slot + 1}を検索</label>
+          <input id="${mode}-move-search-${slot}" class="move-search" list="${listId}" data-field="move-search" data-mode="${mode}" data-slot="${slot}" value="${escapeAttr(selected || "")}" placeholder="技名を検索して選択" autocomplete="off" />
+          <datalist id="${listId}">
+            ${available.map((candidate) => `<option value="${escapeAttr(candidate.name)}">${escapeHtml(candidate.name)}${candidate.candidate ? " *" : ""}</option>`).join("")}
+          </datalist>
+          <div class="move-select-wrap">
+            <span class="move-select-caption">候補</span>
+            <select class="move-select" data-field="move" data-mode="${mode}" data-slot="${slot}">
+              <option value="">技を選択</option>
+              ${available.map((candidate) => `<option value="${escapeAttr(candidate.name)}" ${moveKey(candidate.name) === selectedKey ? "selected" : ""}>${escapeHtml(candidate.name)}${candidate.candidate ? " *" : ""}</option>`).join("")}
+            </select>
+          </div>
           ${move ? renderMoveMeta(move) : ""}
           ${move ? renderHitSelector(mode, slot, move) : ""}
         </div>
@@ -976,6 +1052,11 @@
       setPoint(target.dataset.mode, target.dataset.stat, number(target.dataset.value, 0));
       return;
     }
+    if (action === "calc-section") {
+      state.calcSection = target.dataset.section || "moves";
+      render();
+      return;
+    }
     if (action === "save") saveCurrentBuild();
     if (action === "sync-calc") syncBuildToCalc();
     if (action === "apply-calc") applyCalcToBuild();
@@ -1003,6 +1084,10 @@
     const target = event.target;
     if (!target.dataset) return;
     const field = target.dataset.field;
+    if (field === "move-search") {
+      commitMoveSearch(target);
+      return;
+    }
     if (field === "build-name") updatePokemon("build", target.value);
     if (field === "calc-attacker-name") updatePokemon("calc-attacker", target.value);
     if (field === "calc-defender-name") updatePokemon("calc-defender", target.value);
@@ -1018,6 +1103,10 @@
 
     const field = target.dataset.field;
 
+    if (field === "move-search") {
+      commitMoveSearch(target);
+      return;
+    }
     if (field === "build-name") updatePokemon("build", target.value);
     if (field === "calc-attacker-name") updatePokemon("calc-attacker", target.value);
     if (field === "calc-defender-name") updatePokemon("calc-defender", target.value);
@@ -1051,6 +1140,33 @@
     }
     render();
   });
+
+  function commitMoveSearch(target) {
+    const mode = target.dataset.mode;
+    const slot = Number(target.dataset.slot);
+    const value = (target.value || "").trim();
+    const pokemonName = mode === "calc" ? state.calc.attackerName : state.build.name;
+    const available = getMoves(pokemonName);
+    const moves = mode === "calc" ? state.calc.moves : state.build.moves;
+    if (!value) {
+      moves[slot] = "";
+      getMoveHitsByMode(mode)[slot] = "";
+      render();
+      return;
+    }
+    const exact = findMoveInList(available, value) || findAnyMove(value);
+    const normalized = moveKey(value);
+    const partial = available.filter((move) => moveKey(move.name).includes(normalized));
+    const picked = exact || (partial.length === 1 ? partial[0] : null);
+    if (!picked) {
+      showToast("候補から技を選択してください");
+      render();
+      return;
+    }
+    moves[slot] = picked.name;
+    getMoveHitsByMode(mode)[slot] = "";
+    render();
+  }
 
   function getModeSource(mode) {
     if (mode === "calc-attacker") {
@@ -1159,6 +1275,7 @@
     state.calc.moves = state.build.moves.slice(0, 4);
     state.calc.moveHits = (state.build.moveHits || ["", "", "", ""]).slice(0, 4);
     state.activeView = "calc";
+    state.calcSection = "moves";
     showToast("育成をダメージ計算へ送りました");
     render();
   }
@@ -1253,6 +1370,7 @@
       state.calc.moves = saved.moves.slice(0, 4);
       state.calc.moveHits = (saved.moveHits || ["", "", "", ""]).slice(0, 4);
       state.activeView = "calc";
+      state.calcSection = "moves";
     } else {
       state.build = {
         name: saved.name,
