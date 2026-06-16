@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const DATA_DIR = "data※使う場合名前変更禁止";
+  const DATA_DIR = "data#U203b#U4f7f#U3046#U5834#U5408#U540d#U524d#U5909#U66f4#U7981#U6b62";
   const LEVEL = 50;
   const IV = 31;
   const POINT_TOTAL = 66;
@@ -100,6 +100,7 @@
     ranking: null,
     pokemonByName: new Map(),
     moveByName: new Map(),
+    moveByKey: new Map(),
     megaByBase: new Map(),
     baseByMega: new Map(),
     movesByPokemon: new Map(),
@@ -159,6 +160,8 @@
       state.pokemon.forEach((pokemon) => state.pokemonByName.set(pokemon.name, pokemon));
       state.moves.forEach((move) => {
         if (!state.moveByName.has(move.name)) state.moveByName.set(move.name, move);
+        const key = moveKey(move.name);
+        if (!state.moveByKey.has(key)) state.moveByKey.set(key, move);
       });
       groupMega();
       groupMoves();
@@ -306,7 +309,7 @@
     state.moves.forEach((move) => {
       if (!grouped.has(move.pokemon)) grouped.set(move.pokemon, []);
       const bucket = grouped.get(move.pokemon);
-      if (!bucket.some((item) => item.name === move.name)) bucket.push(move);
+      if (!bucket.some((item) => moveKey(item.name) === moveKey(move.name))) bucket.push(move);
     });
     grouped.forEach((bucket) => {
       bucket.sort((a, b) => Number(b.candidate) - Number(a.candidate) || a.name.localeCompare(b.name, "ja"));
@@ -468,10 +471,10 @@
           <section class="panel">
             <div class="panel-header">
               <h2>ステータス</h2>
-              <span class="panel-meta">残り ${POINT_TOTAL - totalPoints(state.build.ev)} / ${POINT_TOTAL}</span>
+              <span class="panel-meta" data-point-remaining="build">残り ${POINT_TOTAL - totalPoints(state.build.ev)} / ${POINT_TOTAL}</span>
             </div>
             <div class="panel-body">
-              ${renderPointSummary(state.build.ev)}
+              ${renderPointSummary("build", state.build.ev)}
               ${renderStatRows("build", state.build.ev, stats, state.build.nature)}
             </div>
           </section>
@@ -510,9 +513,9 @@
           <div class="view">
             ${renderBasicPanel("calc-attacker")}
             <section class="panel compact">
-              <div class="panel-header"><h3>攻撃側ステータス</h3><span class="panel-meta">残り ${POINT_TOTAL - totalPoints(state.calc.attackerEv)} / ${POINT_TOTAL}</span></div>
+              <div class="panel-header"><h3>攻撃側ステータス</h3><span class="panel-meta" data-point-remaining="calc-attacker">残り ${POINT_TOTAL - totalPoints(state.calc.attackerEv)} / ${POINT_TOTAL}</span></div>
               <div class="panel-body">
-                ${renderPointSummary(state.calc.attackerEv)}
+                ${renderPointSummary("calc-attacker", state.calc.attackerEv)}
                 ${renderStatRows("calc-attacker", state.calc.attackerEv, calcStats(getPokemon(state.calc.attackerName), state.calc.attackerEv, state.calc.attackerNature), state.calc.attackerNature)}
               </div>
             </section>
@@ -520,9 +523,9 @@
           <div class="view">
             ${renderBasicPanel("calc-defender")}
             <section class="panel compact">
-              <div class="panel-header"><h3>防御側ステータス</h3><span class="panel-meta">残り ${POINT_TOTAL - totalPoints(state.calc.defenderEv)} / ${POINT_TOTAL}</span></div>
+              <div class="panel-header"><h3>防御側ステータス</h3><span class="panel-meta" data-point-remaining="calc-defender">残り ${POINT_TOTAL - totalPoints(state.calc.defenderEv)} / ${POINT_TOTAL}</span></div>
               <div class="panel-body">
-                ${renderPointSummary(state.calc.defenderEv)}
+                ${renderPointSummary("calc-defender", state.calc.defenderEv)}
                 ${renderStatRows("calc-defender", state.calc.defenderEv, calcStats(getPokemon(state.calc.defenderName), state.calc.defenderEv, state.calc.defenderNature), state.calc.defenderNature)}
               </div>
             </section>
@@ -608,7 +611,7 @@
   function renderBasicPanel(mode) {
     const source = getModeSource(mode);
     const pokemon = getPokemon(source.name);
-    const abilities = [pokemon.ability1, pokemon.ability2, pokemon.hiddenAbility].filter(Boolean);
+    const abilities = getAbilityOptions(source.name);
     const itemOptions = ["", ...state.tools.slice(0, 80).map((tool) => tool["名前"])];
     const title = mode === "calc-defender" ? "防御側" : mode === "calc-attacker" ? "攻撃側" : "基本情報";
     const nameField = mode === "build" ? "build-name" : mode === "calc-attacker" ? "calc-attacker-name" : "calc-defender-name";
@@ -663,13 +666,13 @@
     `;
   }
 
-  function renderPointSummary(ev) {
+  function renderPointSummary(mode, ev) {
     const used = totalPoints(ev);
     const width = Math.min(100, Math.round((used / POINT_TOTAL) * 100));
     return `
-      <div class="point-summary">
-        <span><strong>${used}</strong> / ${POINT_TOTAL}</span>
-        <div class="point-bar" aria-hidden="true"><span style="width:${width}%"></span></div>
+      <div class="point-summary" data-point-summary="${mode}">
+        <span><strong data-point-used>${used}</strong> / ${POINT_TOTAL}</span>
+        <div class="point-bar" aria-hidden="true"><span data-point-bar style="width:${width}%"></span></div>
         <span>上限 ${POINT_MAX}</span>
       </div>
     `;
@@ -690,6 +693,10 @@
               <input type="range" min="0" max="${POINT_MAX}" value="${value}" data-action="point-range" data-mode="${mode}" data-stat="${stat.key}" aria-label="${stat.label}ポイント" />
               <button class="mini-button" type="button" data-action="point-plus" data-mode="${mode}" data-stat="${stat.key}" aria-label="${stat.label}を上げる">＋</button>
               <input class="stat-number" type="number" inputmode="numeric" min="0" max="${POINT_MAX}" value="${value}" data-action="point-number" data-mode="${mode}" data-stat="${stat.key}" aria-label="${stat.label}ポイント数" />
+              <div class="stat-quick-buttons" aria-label="${stat.label}のクイック設定">
+                <button class="mini-button quick-point-button" type="button" data-action="point-set" data-value="0" data-mode="${mode}" data-stat="${stat.key}" aria-label="${stat.label}を0にする">0</button>
+                <button class="mini-button quick-point-button" type="button" data-action="point-set" data-value="32" data-mode="${mode}" data-stat="${stat.key}" aria-label="${stat.label}を32にする">32</button>
+              </div>
             </div>
           `;
         }).join("")}
@@ -704,7 +711,7 @@
       <section class="panel">
         <div class="panel-header">
           <h2>${title}</h2>
-          <span class="panel-meta">${available.length}候補</span>
+          <span class="panel-meta">CSV ${available.length}候補</span>
         </div>
         <div class="panel-body">
           <div class="moves-list">
@@ -716,14 +723,15 @@
   }
 
   function renderMoveSlot(mode, slot, selected, available, result) {
-    const move = available.find((item) => item.name === selected) || findAnyMove(selected);
+    const move = findMoveInList(available, selected) || findAnyMove(selected);
+    const selectedKey = moveKey(selected);
     return `
       <div class="move-row">
         <span class="slot-index">${slot + 1}</span>
         <div class="move-main">
           <select class="move-select" data-field="move" data-mode="${mode}" data-slot="${slot}">
             <option value="">技を選択</option>
-            ${available.map((candidate) => `<option value="${escapeAttr(candidate.name)}" ${candidate.name === selected ? "selected" : ""}>${escapeHtml(candidate.name)}${candidate.candidate ? " *" : ""}</option>`).join("")}
+            ${available.map((candidate) => `<option value="${escapeAttr(candidate.name)}" ${moveKey(candidate.name) === selectedKey ? "selected" : ""}>${escapeHtml(candidate.name)}${candidate.candidate ? " *" : ""}</option>`).join("")}
           </select>
           ${move ? renderMoveMeta(move) : ""}
         </div>
@@ -864,6 +872,10 @@
       setPoint(target.dataset.mode, target.dataset.stat, getEvByMode(target.dataset.mode)[target.dataset.stat] + delta);
       return;
     }
+    if (action === "point-set") {
+      setPoint(target.dataset.mode, target.dataset.stat, number(target.dataset.value, 0));
+      return;
+    }
     if (action === "save") saveCurrentBuild();
     if (action === "sync-calc") syncBuildToCalc();
     if (action === "apply-calc") applyCalcToBuild();
@@ -880,7 +892,7 @@
     const target = event.target;
     if (!target.dataset) return;
     if (target.dataset.action === "point-range" || target.dataset.action === "point-number") {
-      setPoint(target.dataset.mode, target.dataset.stat, number(target.value, 0));
+      setPoint(target.dataset.mode, target.dataset.stat, number(target.value, 0), { renderNow: false });
     }
     if (target.dataset.field === "nickname") {
       state.build.nickname = target.value;
@@ -899,6 +911,11 @@
   document.addEventListener("change", (event) => {
     const target = event.target;
     if (!target.dataset) return;
+    if (target.dataset.action === "point-range" || target.dataset.action === "point-number") {
+      setPoint(target.dataset.mode, target.dataset.stat, number(target.value, 0));
+      return;
+    }
+
     const field = target.dataset.field;
 
     if (field === "build-name") updatePokemon("build", target.value);
@@ -937,13 +954,36 @@
     return state.build.ev;
   }
 
-  function setPoint(mode, stat, requested) {
+  function setPoint(mode, stat, requested, options = {}) {
     const ev = getEvByMode(mode);
     const current = ev[stat] || 0;
     const without = totalPoints(ev) - current;
     const next = clamp(Math.round(requested), 0, Math.min(POINT_MAX, POINT_TOTAL - without));
     ev[stat] = next;
+    if (options.renderNow === false) {
+      syncPointInputs(mode, stat);
+      return;
+    }
     render();
+  }
+
+  function syncPointInputs(mode, stat) {
+    const ev = getEvByMode(mode);
+    const value = ev[stat] || 0;
+    document.querySelectorAll(`[data-action="point-range"][data-mode="${mode}"][data-stat="${stat}"], [data-action="point-number"][data-mode="${mode}"][data-stat="${stat}"]`).forEach((input) => {
+      input.value = value;
+    });
+    const used = totalPoints(ev);
+    const width = Math.min(100, Math.round((used / POINT_TOTAL) * 100));
+    document.querySelectorAll(`[data-point-summary="${mode}"]`).forEach((summary) => {
+      const usedNode = summary.querySelector("[data-point-used]");
+      const barNode = summary.querySelector("[data-point-bar]");
+      if (usedNode) usedNode.textContent = used;
+      if (barNode) barNode.style.width = `${width}%`;
+    });
+    document.querySelectorAll(`[data-point-remaining="${mode}"]`).forEach((node) => {
+      node.textContent = `残り ${POINT_TOTAL - used} / ${POINT_TOTAL}`;
+    });
   }
 
   function updatePokemon(mode, name) {
@@ -1117,9 +1157,9 @@
   function suggestMoves(pokemonName) {
     const moves = getMoves(pokemonName);
     const rank = getRankingForPokemon(pokemonName);
-    const rankedNames = rank?.moves?.map((value) => value.replace(/\s*\([^)]*\)\s*$/, "")) || [];
+    const rankedNames = getRankedMoveNames(rank);
     const candidates = [
-      ...rankedNames.map((name) => moves.find((move) => move.name === name)).filter(Boolean),
+      ...rankedNames.map((name) => findMoveInList(moves, name)).filter(Boolean),
       ...moves.filter((move) => move.candidate),
       ...moves.filter((move) => move.category !== "変化"),
       ...moves,
@@ -1129,7 +1169,7 @@
 
   function calcAllMoves(config) {
     return [0, 1, 2, 3].map((slot) => {
-      const move = getMoves(config.attackerName).find((item) => item.name === config.moves[slot]) || findAnyMove(config.moves[slot]);
+      const move = findMoveInList(getMoves(config.attackerName), config.moves[slot]) || findAnyMove(config.moves[slot]);
       return calcMoveDamage(config, move);
     });
   }
@@ -1326,17 +1366,30 @@
   }
 
   function getMoves(name) {
-    const ownMoves = state.movesByPokemon.get(name) || [];
-    if (ownMoves.length) return ownMoves;
+    const collected = [];
+    const addMove = (move) => {
+      if (!move) return;
+      if (!collected.some((item) => moveKey(item.name) === moveKey(move.name))) collected.push(move);
+    };
+    const addMoveList = (moves) => (moves || []).forEach(addMove);
+
+    addMoveList(state.movesByPokemon.get(name));
+
     const baseName = state.baseByMega.get(name);
-    const baseMoves = baseName ? state.movesByPokemon.get(baseName) || [] : [];
-    if (baseMoves.length) return baseMoves;
+    if (baseName) addMoveList(state.movesByPokemon.get(baseName));
+
     const rank = getRankingForPokemon(name);
-    const rankedNames = rank?.moves?.map((value) => value.replace(/\s*\([^)]*\)\s*$/, "")) || [];
-    const fallback = unique(rankedNames)
-      .map((moveName) => state.moveByName.get(moveName))
-      .filter(Boolean);
-    return fallback;
+    const rankedNames = getRankedMoveNames(rank);
+    rankedNames.forEach((moveName) => {
+      addMove(findMoveInList(collected, moveName) || findAnyMove(moveName));
+    });
+
+    const rankOrder = new Map(rankedNames.map((moveName, index) => [moveKey(moveName), index]));
+    return collected.sort((a, b) => {
+      const rankA = rankOrder.has(moveKey(a.name)) ? rankOrder.get(moveKey(a.name)) : 9999;
+      const rankB = rankOrder.has(moveKey(b.name)) ? rankOrder.get(moveKey(b.name)) : 9999;
+      return rankA - rankB || Number(b.candidate) - Number(a.candidate) || Number(b.category !== "変化") - Number(a.category !== "変化") || a.name.localeCompare(b.name, "ja");
+    });
   }
 
   function getRankingForPokemon(name) {
@@ -1345,7 +1398,39 @@
 
   function findAnyMove(name) {
     if (!name) return null;
-    return state.moveByName.get(name) || null;
+    return state.moveByName.get(name) || state.moveByKey.get(moveKey(name)) || null;
+  }
+
+  function findMoveInList(moves, name) {
+    if (!name) return null;
+    const key = moveKey(name);
+    return (moves || []).find((move) => moveKey(move.name) === key) || null;
+  }
+
+  function getRankedMoveNames(rank) {
+    return rank?.moves?.map((value) => stripUsageText(value)).filter(Boolean) || [];
+  }
+
+  function getAbilityOptions(pokemonName) {
+    const pokemon = getPokemon(pokemonName);
+    const baseAbilities = [pokemon.ability1, pokemon.ability2, pokemon.hiddenAbility].filter(Boolean);
+    if (state.baseByMega.has(pokemonName)) return unique(baseAbilities);
+    const rank = getRankingForPokemon(pokemonName);
+    const rankingAbilities = rank?.abilities?.map((value) => stripUsageText(value)).filter(Boolean) || [];
+    return unique([...rankingAbilities, ...baseAbilities]);
+  }
+
+  function stripUsageText(value) {
+    return String(value || "")
+      .replace(/\s*[（(][^）)]*[）)]\s*$/, "")
+      .trim();
+  }
+
+  function moveKey(value) {
+    return String(value || "")
+      .normalize("NFKC")
+      .replace(/\s+/g, "")
+      .toLowerCase();
   }
 
   function getNature(name) {

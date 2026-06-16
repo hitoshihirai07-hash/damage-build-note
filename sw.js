@@ -1,4 +1,4 @@
-const CACHE_NAME = "damage-build-note-v2";
+const CACHE_NAME = "damage-build-note-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,11 +10,11 @@ const APP_SHELL = [
   "./assets/icons/icon-512.png",
   "./assets/icons/maskable-512.png",
   "./assets/icons/apple-touch-icon.png",
-  "./data※使う場合名前変更禁止/pokemon.csv",
-  "./data※使う場合名前変更禁止/pokemon_moves.csv",
-  "./data※使う場合名前変更禁止/tool.csv",
-  "./data※使う場合名前変更禁止/mega.csv",
-  "./data※使う場合名前変更禁止/season_ranking_single_s2.json"
+  "./data#U203b#U4f7f#U3046#U5834#U5408#U540d#U524d#U5909#U66f4#U7981#U6b62/pokemon.csv",
+  "./data#U203b#U4f7f#U3046#U5834#U5408#U540d#U524d#U5909#U66f4#U7981#U6b62/pokemon_moves.csv",
+  "./data#U203b#U4f7f#U3046#U5834#U5408#U540d#U524d#U5909#U66f4#U7981#U6b62/tool.csv",
+  "./data#U203b#U4f7f#U3046#U5834#U5408#U540d#U524d#U5909#U66f4#U7981#U6b62/mega.csv",
+  "./data#U203b#U4f7f#U3046#U5834#U5408#U540d#U524d#U5909#U66f4#U7981#U6b62/season_ranking_single_s2.json"
 ];
 
 self.addEventListener("install", (event) => {

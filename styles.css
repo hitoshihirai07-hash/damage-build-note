@@ -378,7 +378,7 @@ button {
 
 .stat-row {
   display: grid;
-  grid-template-columns: minmax(42px, 0.65fr) minmax(42px, 0.55fr) 38px minmax(96px, 1.35fr) 38px minmax(56px, 0.72fr);
+  grid-template-columns: minmax(42px, 0.65fr) minmax(42px, 0.55fr) 38px minmax(96px, 1.35fr) 38px minmax(56px, 0.72fr) auto;
   gap: 8px;
   align-items: center;
   min-height: 56px;
@@ -412,6 +412,19 @@ button {
 .stat-row input[type="range"] {
   width: 100%;
   accent-color: var(--blue);
+}
+
+.stat-quick-buttons {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.quick-point-button {
+  width: 38px;
+  min-height: 34px;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .stat-number {
@@ -766,6 +779,16 @@ button {
   .stat-row {
     grid-template-columns: minmax(38px, 0.6fr) minmax(34px, 0.44fr) 34px minmax(74px, 1fr) 34px minmax(48px, 0.62fr);
     gap: 6px;
+  }
+
+  .stat-quick-buttons {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .quick-point-button {
+    width: 44px;
+    min-height: 32px;
   }
 
   .mini-button {
