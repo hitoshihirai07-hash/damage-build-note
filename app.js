@@ -118,6 +118,7 @@
     rankingByPokemon: new Map(),
     build: null,
     calc: null,
+    dexName: "",
     saved: [],
   };
 
@@ -352,7 +353,7 @@
   function createInitialState() {
     const fallbackPokemon = firstSelectablePokemon();
     if (!fallbackPokemon || !fallbackPokemon.name) {
-      throw new Error("ポケモンデータを読み込めませんでした。dataフォルダ名とpokemon.csvを確認してください。");
+      throw new Error("ポケモンデータを読み込めませんでした。データファイルを確認してください。");
     }
     const preferredAttacker = firstSelectable(["ガブリアス", "リザードン", "フシギバナ"]) || fallbackPokemon.name;
     const preferredDefender = firstSelectable(["ブリジュラス", "カメックス", "フシギバナ"]) || fallbackPokemon.name || preferredAttacker;
@@ -392,7 +393,9 @@
       defenderStatus: "なし",
       attackerHpCondition: "通常",
       allyFainted: 0,
+      defenderHazards: defaultHazards(),
     };
+    state.dexName = preferredAttacker;
     applyPokemonPreset("build", state.build.name, { keepMoves: false });
     applyPokemonPreset("calc-attacker", state.calc.attackerName, { keepMoves: false });
   }
@@ -446,6 +449,7 @@
       <nav class="tabs" role="tablist">
         ${renderTab("build", "育成登録")}
         ${renderTab("calc", "ダメージ計算")}
+        ${renderTab("dex", "図鑑")}
         ${renderTab("team", "チーム")}
       </nav>
       ${renderSeasonFilter()}
@@ -460,6 +464,7 @@
 
   function renderActiveView() {
     if (state.activeView === "calc") return renderCalcView();
+    if (state.activeView === "dex") return renderDexView();
     if (state.activeView === "team") return renderTeamView();
     return renderBuildView();
   }
@@ -503,6 +508,7 @@
       defenderStatus: state.calc.defenderStatus,
       attackerHpCondition: state.calc.attackerHpCondition,
       allyFainted: state.calc.allyFainted,
+      defenderHazards: cloneHazards(state.calc.defenderHazards),
     });
 
     return `
@@ -637,6 +643,7 @@
             </div>
           </section>
           ${renderRankPanel("calc-defender", "防御側ランク")}
+          ${renderHazardPanel()}
         </div>
       `;
     }
@@ -698,6 +705,97 @@
           </div>
         </div>
       </section>
+    `;
+  }
+
+  function renderDexView() {
+    const selected = state.pokemonByName.has(state.dexName) && isPokemonSelectable(state.dexName)
+      ? state.dexName
+      : firstSelectablePokemon()?.name;
+    state.dexName = selected || "";
+    const family = getDexFamily(selected);
+    return `
+      <main class="view dex-view">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>ポケモン図鑑</h2>
+            <span class="panel-meta">種族値・特性・技</span>
+          </div>
+          <div class="panel-body field-grid">
+            <div class="field">
+              <label for="dex-name">ポケモン検索</label>
+              <input id="dex-name" list="pokemon-options" data-field="dex-name" value="${escapeAttr(state.dexName)}" autocomplete="off" />
+            </div>
+            <div class="dex-guide">メガ進化があるポケモンは通常形態とメガ後をまとめて表示します。各カードから育成登録・ダメージ計算へ反映できます。</div>
+          </div>
+        </section>
+        <div class="dex-card-list">
+          ${family.map((name) => renderDexCard(name)).join("")}
+        </div>
+      </main>
+    `;
+  }
+
+  function renderDexCard(name) {
+    const pokemon = getPokemon(name);
+    const stats = pokemon.stats || {};
+    const abilities = getAbilityOptions(name);
+    const moves = getMoves(name);
+    const rank = getRankingForPokemon(name);
+    const rankedNames = new Set(getRankedMoveNames(rank).map(moveKey));
+    const baseName = state.baseByMega.get(name);
+    const megaNames = state.megaByBase.get(name)?.map((entry) => entry.megaName) || [];
+    const relation = baseName ? `通常形態：${baseName}` : megaNames.length ? `メガ進化：${megaNames.join(" / ")}` : "メガ進化なし";
+    return `
+      <article class="panel dex-card">
+        <div class="panel-header">
+          <h2>${escapeHtml(name)}</h2>
+          <span class="panel-meta">No.${escapeHtml(pokemon.no || "-")} / ${escapeHtml(relation)}</span>
+        </div>
+        <div class="panel-body">
+          <div class="dex-card-top">
+            <div>
+              <div class="dex-types">${renderTypePills(pokemon)}</div>
+              <p class="dex-relation">${escapeHtml(relation)}</p>
+            </div>
+            <div class="dex-actions">
+              <button class="ghost-button small" type="button" data-action="apply-dex" data-target="build" data-name="${escapeAttr(name)}">育成へ</button>
+              <button class="ghost-button small" type="button" data-action="apply-dex" data-target="attacker" data-name="${escapeAttr(name)}">攻撃側へ</button>
+              <button class="ghost-button small" type="button" data-action="apply-dex" data-target="defender" data-name="${escapeAttr(name)}">防御側へ</button>
+            </div>
+          </div>
+          <div class="dex-stats">
+            ${STAT_KEYS.map((stat) => `<div><span>${stat.label}</span><strong>${stats[stat.key] ?? "-"}</strong></div>`).join("")}
+          </div>
+          <section class="dex-section">
+            <h3>特性</h3>
+            <div class="ability-list">
+              ${abilities.length ? abilities.map((ability) => renderAbilityDexItem(ability)).join("") : `<p class="empty-state">特性データなし</p>`}
+            </div>
+          </section>
+          <section class="dex-section">
+            <h3>技</h3>
+            <div class="dex-move-list">
+              ${moves.length ? moves.map((move) => renderDexMoveTag(move, rankedNames)).join("") : `<p class="empty-state">技データなし</p>`}
+            </div>
+          </section>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderAbilityDexItem(abilityName) {
+    const detail = state.abilityByName.get(abilityName)?.["効果"] || "";
+    return `<details class="ability-item"><summary>${escapeHtml(abilityName)}</summary>${detail ? `<p>${escapeHtml(detail)}</p>` : `<p>効果データなし</p>`}</details>`;
+  }
+
+  function renderDexMoveTag(move, rankedNames) {
+    const ranked = rankedNames.has(moveKey(move.name));
+    return `
+      <div class="dex-move ${move.candidate || ranked ? "recommended" : ""}">
+        <strong>${escapeHtml(move.name)}${ranked ? " ★" : move.candidate ? " *" : ""}</strong>
+        <span>${typePill(move.type)} ${escapeHtml(move.category)} / 威力 ${displayPower(move)}${move.accuracy ? ` / 命中 ${escapeHtml(move.accuracy)}` : ""}</span>
+      </div>
     `;
   }
 
@@ -856,6 +954,31 @@
     `;
   }
 
+  function renderHazardPanel() {
+    const hazards = state.calc.defenderHazards || defaultHazards();
+    const defender = getPokemon(state.calc.defenderName);
+    const defenderStats = calcStats(defender, state.calc.defenderEv, state.calc.defenderNature);
+    const preview = calcEntryHazards(defender, defenderStats.hp, state.calc.defenderAbility || defaultAbility(state.calc.defenderName), state.calc.defenderItem, hazards);
+    return `
+      <section class="panel compact hazard-panel">
+        <div class="panel-header"><h3>防御側の設置技</h3><span class="panel-meta">交代時ダメージを込みで計算</span></div>
+        <div class="panel-body">
+          <label class="check-card">
+            <input type="checkbox" data-field="defender-hazard-stealth-rock" ${hazards.stealthRock ? "checked" : ""} />
+            <span><strong>ステルスロック</strong><small>いわ相性で最大HPの1/8を増減</small></span>
+          </label>
+          <div class="field">
+            <label for="defender-hazard-spikes">まきびし</label>
+            <select id="defender-hazard-spikes" class="plain-select" data-field="defender-hazard-spikes">
+              ${[0, 1, 2, 3].map((value) => option(value === 0 ? "なし" : `${value}回`, String(hazards.spikes || 0), String(value))).join("")}
+            </select>
+          </div>
+          <p class="hazard-preview">現在の設置ダメージ：${preview.damage} / ${preview.pct.toFixed(1)}%${preview.notes.length ? `（${escapeHtml(preview.notes.join("・"))}）` : ""}</p>
+        </div>
+      </section>
+    `;
+  }
+
   function renderMovesPanel(mode, pokemonName, moves, results) {
     const available = getMoves(pokemonName);
     const title = mode === "calc" ? "技と計算結果" : "技 (4/4)";
@@ -863,7 +986,7 @@
       <section class="panel">
         <div class="panel-header">
           <h2>${title}</h2>
-          <span class="panel-meta">CSV ${available.length}候補</span>
+          <span class="panel-meta">${available.length}候補</span>
         </div>
         <div class="panel-body">
           <div class="moves-list">
@@ -1066,6 +1189,7 @@
     if (action === "load-build-calc") loadBuild(target.dataset.id, true);
     if (action === "delete-build") deleteBuild(target.dataset.id);
     if (action === "switch-pokemon") updatePokemon(target.dataset.mode, target.dataset.name);
+    if (action === "apply-dex") applyDexPokemon(target.dataset.target, target.dataset.name);
     if (action === "install-app") installApp();
   });
 
@@ -1091,6 +1215,7 @@
     if (field === "build-name") updatePokemon("build", target.value);
     if (field === "calc-attacker-name") updatePokemon("calc-attacker", target.value);
     if (field === "calc-defender-name") updatePokemon("calc-defender", target.value);
+    if (field === "dex-name") updateDexPokemon(target.value);
   });
 
   document.addEventListener("change", (event) => {
@@ -1126,6 +1251,8 @@
     if (field === "defender-status") state.calc.defenderStatus = target.value;
     if (field === "attacker-hp-condition") state.calc.attackerHpCondition = target.value;
     if (field === "ally-fainted") state.calc.allyFainted = number(target.value, 0);
+    if (field === "defender-hazard-stealth-rock") state.calc.defenderHazards.stealthRock = target.checked;
+    if (field === "defender-hazard-spikes") state.calc.defenderHazards.spikes = number(target.value, 0);
     if (field === "rank") { setRank(target.dataset.mode, target.dataset.stat, target.value); return; }
     if (field === "move-hit") {
       const hits = getMoveHitsByMode(target.dataset.mode);
@@ -1264,6 +1391,43 @@
     }
     applyPokemonPreset(mode, name, { keepMoves: false });
     render();
+  }
+
+  function updateDexPokemon(name) {
+    if (!state.pokemonByName.has(name)) {
+      showToast("該当するポケモンが見つかりません");
+      render();
+      return;
+    }
+    if (!isPokemonSelectable(name)) {
+      showToast(`${state.seasonFilter}では対象外です`);
+      render();
+      return;
+    }
+    state.dexName = name;
+    render();
+  }
+
+  function applyDexPokemon(target, name) {
+    if (!state.pokemonByName.has(name) || !isPokemonSelectable(name)) {
+      showToast("対象のポケモンを反映できません");
+      render();
+      return;
+    }
+    if (target === "attacker") {
+      state.activeView = "calc";
+      state.calcSection = "attacker";
+      updatePokemon("calc-attacker", name);
+      return;
+    }
+    if (target === "defender") {
+      state.activeView = "calc";
+      state.calcSection = "defender";
+      updatePokemon("calc-defender", name);
+      return;
+    }
+    state.activeView = "build";
+    updatePokemon("build", name);
   }
 
   function syncBuildToCalc() {
@@ -1430,6 +1594,7 @@
       state.calc.defenderName = firstSelectable(["ブリジュラス", fallback.name]) || fallback.name;
       state.calc.defenderAbility = defaultAbility(state.calc.defenderName);
     }
+    if (!state.dexName || !isPokemonSelectable(state.dexName)) state.dexName = fallback.name;
   }
 
   function suggestMoves(pokemonName) {
@@ -1462,7 +1627,7 @@
     const defenderAbility = cfg.defenderAbility || defaultAbility(cfg.defenderName);
     const weather = effectiveWeather(cfg.weather, attackerAbility, defenderAbility);
     const field = effectiveField(cfg.field, attackerAbility, defenderAbility);
-    const moveType = resolveMoveType(move, attackerAbility, weather);
+    const moveType = resolveMoveType(move, attackerAbility, weather, field, attacker, cfg.attackerItem);
     const moveForCalc = { ...move, type: moveType };
 
     if (move.category === "変化") {
@@ -1476,9 +1641,10 @@
     const baseDefenderStats = calcStats(defender, cfg.defenderEv, cfg.defenderNature);
     const attackerStats = applyBattleStatModifiers(baseAttackerStats, attacker, "attacker", cfg, moveForCalc, attackerAbility, defenderAbility, weather, field);
     const defenderStats = applyBattleStatModifiers(baseDefenderStats, defender, "defender", cfg, moveForCalc, defenderAbility, attackerAbility, weather, field);
-    const rawPower = resolvePower(moveForCalc, attacker, defender, attackerStats, defenderStats, cfg, weather);
+    const rawPower = resolvePower(moveForCalc, attacker, defender, attackerStats, defenderStats, cfg, weather, field, attackerAbility, defenderAbility);
+    const fixedDamage = fixedDamageForMove(moveForCalc);
 
-    if (!rawPower) {
+    if (!rawPower && !fixedDamage) {
       return { ok: false, move: moveForCalc, reason: "威力なし / 条件未対応" };
     }
 
@@ -1493,12 +1659,14 @@
     attackStat = applyRuinAttackModifier(attackStat, physical, defenderAbility);
     defenseStat = applyRuinDefenseModifier(defenseStat, physical, attackerAbility);
 
-    const type = effectiveness(moveType, defender, attackerAbility, defenderAbility);
+    const type = move.name === "フライングプレス"
+      ? effectiveness("かくとう", defender, attackerAbility, defenderAbility) * effectiveness("ひこう", defender, attackerAbility, defenderAbility)
+      : effectiveness(moveType, defender, attackerAbility, defenderAbility);
     const selectedHits = resolveHits(moveForCalc, cfg.moveHits?.[slot]);
     const powers = resolvePowerList(moveForCalc, rawPower, selectedHits);
     const powerModifier = attackerPowerModifier(attackerAbility, moveForCalc, rawPower, type, cfg, weather, field);
     const itemModifier = itemDamageModifier(cfg.attackerItem, moveForCalc, physical);
-    const fieldModifier = fieldDamageModifier(field, moveForCalc, defender);
+    const fieldModifier = fieldDamageModifier(field, moveForCalc, defender, defenderAbility, cfg.defenderItem);
     const weatherModifier = weatherDamageModifier(weather, moveType);
     const wallModifier = wallDamageModifier(cfg.reflect, move.category);
     const abilityFinalModifier = abilityFinalDamageModifier(attackerAbility, defenderAbility, moveForCalc, type, cfg, weather);
@@ -1509,35 +1677,47 @@
 
     const values = [];
     for (let random = 85; random <= 100; random += 1) {
-      const total = powers.reduce((sum, power) => {
-        const adjustedPower = Math.max(1, Math.floor(power * powerModifier));
-        const base = Math.floor(Math.floor((((Math.floor((2 * LEVEL) / 5) + 2) * adjustedPower * Math.max(1, attackStat)) / Math.max(1, defenseStat)) / 50) + 2);
-        if (type === 0) return sum;
-        const damage = Math.floor(base * stab * type * itemModifier * weatherModifier * fieldModifier * wallModifier * abilityFinalModifier * defensiveItemModifier * burnModifier * (random / 100));
-        return sum + Math.max(1, damage);
-      }, 0);
+      const total = fixedDamage
+        ? (type === 0 ? 0 : fixedDamage)
+        : powers.reduce((sum, power) => {
+            const adjustedPower = Math.max(1, Math.floor(power * powerModifier));
+            const base = Math.floor(Math.floor((((Math.floor((2 * LEVEL) / 5) + 2) * adjustedPower * Math.max(1, attackStat)) / Math.max(1, defenseStat)) / 50) + 2);
+            if (type === 0) return sum;
+            const damage = Math.floor(base * stab * type * itemModifier * weatherModifier * fieldModifier * wallModifier * abilityFinalModifier * defensiveItemModifier * burnModifier * (random / 100));
+            return sum + Math.max(1, damage);
+          }, 0);
       values.push(total);
     }
 
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const moveMin = Math.min(...values);
+    const moveMax = Math.max(...values);
     const hp = defenderStats.hp;
+    const hazards = calcEntryHazards(defender, hp, defenderAbility, cfg.defenderItem, cfg.defenderHazards);
+    const min = Math.min(hp, hazards.damage + moveMin);
+    const max = Math.min(hp, hazards.damage + moveMax);
     if (moveType !== move.type) notes.push(`${move.type}→${moveType}`);
     if (selectedHits > 1) notes.push(`${selectedHits}hit`);
     if (weather !== "なし") notes.push(weather);
     if (field !== "なし") notes.push(field.replace("フィールド", "F"));
+    if (hazards.damage > 0) notes.push(`設置${hazards.pct.toFixed(1)}%`);
+    hazards.notes.forEach((note) => notes.push(note));
 
     return {
       ok: true,
       move: moveForCalc,
       min,
       max,
+      moveMin,
+      moveMax,
+      entryDamage: hazards.damage,
+      entryPct: hazards.pct,
       minPct: (min / hp) * 100,
       maxPct: (max / hp) * 100,
       hits: selectedHits,
-      power: rawPower,
+      power: rawPower || fixedDamage,
+      fixedDamage,
       type,
-      note: koNote(min, max, hp, type, selectedHits, notes),
+      note: koNoteWithEntry(moveMin, moveMax, hp, type, notes, hazards.damage),
     };
   }
 
@@ -1564,6 +1744,7 @@
       defenderStatus: config.defenderStatus || "なし",
       attackerHpCondition: config.attackerHpCondition || "通常",
       allyFainted: number(config.allyFainted, 0),
+      defenderHazards: cloneHazards(config.defenderHazards),
     };
   }
 
@@ -1572,6 +1753,7 @@
     const item = role === "attacker" ? cfg.attackerItem : cfg.defenderItem;
     const status = role === "attacker" ? cfg.attackerStatus : cfg.defenderStatus;
     const ranks = role === "attacker" ? cfg.attackerRank : cfg.defenderRank;
+    const ignoreDefenseRank = role === "defender" && ignoresDefenseRank(move.name);
 
     if (item === "でんきだま" && pokemon.name === "ピカチュウ") {
       result.atk = Math.floor(result.atk * 2);
@@ -1600,6 +1782,7 @@
     if (field === "エレキフィールド" && ownAbility === "サーフテール") result.spe = Math.floor(result.spe * 2);
 
     RANK_KEYS.forEach((stat) => {
+      if (ignoreDefenseRank && ["def", "spd"].includes(stat.key)) return;
       result[stat.key] = Math.max(1, Math.floor(result[stat.key] * rankModifier(number(ranks?.[stat.key], 0))));
     });
 
@@ -1644,9 +1827,15 @@
     return Math.round((clamp(points, 0, POINT_MAX) / POINT_MAX) * 252);
   }
 
-  function resolvePower(move, attacker, defender, attackerStats, defenderStats, cfg, weather) {
+  function resolvePower(move, attacker, defender, attackerStats, defenderStats, cfg, weather, field, attackerAbility, defenderAbility) {
     const name = move.name;
     if (name === "おはかまいり") return 50 + 50 * clamp(number(cfg.allyFainted, 0), 0, 5);
+    if (name === "はたきおとす" && cfg.defenderItem) return Math.floor((move.power || 65) * 1.5);
+    if (name === "だいちのはどう" && field !== "なし" && isGrounded(attacker, attackerAbility, cfg.attackerItem)) return 100;
+    if (name === "ライジングボルト" && field === "エレキフィールド" && isGrounded(defender, defenderAbility, cfg.defenderItem)) return (move.power || 70) * 2;
+    if (name === "ワイドフォース" && field === "サイコフィールド" && isGrounded(defender, defenderAbility, cfg.defenderItem)) return Math.floor((move.power || 80) * 1.5);
+    if (name === "ミストバースト" && field === "ミストフィールド" && isGrounded(attacker, attackerAbility, cfg.attackerItem)) return Math.floor((move.power || 100) * 1.5);
+    if (name === "アイアンローラー" && field === "なし") return 0;
     if (["くさむすび", "けたぐり"].includes(name)) return weightPower(defender.weight);
     if (["ヒートスタンプ", "ヘビーボンバー"].includes(name)) return heavyPower(attacker.weight, defender.weight);
     if (name === "ジャイロボール") return Math.min(150, Math.max(1, Math.floor((25 * defenderStats.spe) / Math.max(1, attackerStats.spe)) + 1));
@@ -1671,12 +1860,21 @@
     return move.power || 0;
   }
 
-  function resolveMoveType(move, ability, weather) {
+  function resolveMoveType(move, ability, weather, field = "なし", attacker = null, item = "") {
     if (move.name === "ウェザーボール") {
       if (weather === "はれ") return "ほのお";
       if (weather === "あめ") return "みず";
       if (weather === "ゆき") return "こおり";
       if (weather === "すなあらし") return "いわ";
+    }
+    if (move.name === "だいちのはどう" && attacker && field !== "なし" && isGrounded(attacker, ability, item)) {
+      const terrainTypes = {
+        エレキフィールド: "でんき",
+        グラスフィールド: "くさ",
+        サイコフィールド: "エスパー",
+        ミストフィールド: "フェアリー",
+      };
+      return terrainTypes[field] || move.type;
     }
     if (ability === "ノーマルスキン") return "ノーマル";
     if (move.type !== "ノーマル") return move.type;
@@ -1833,12 +2031,13 @@
     return 1;
   }
 
-  function fieldDamageModifier(field, move, defender) {
-    if (field === "エレキフィールド" && move.type === "でんき") return 1.3;
-    if (field === "グラスフィールド" && move.type === "くさ") return 1.3;
-    if (field === "サイコフィールド" && move.type === "エスパー") return 1.3;
+  function fieldDamageModifier(field, move, defender, defenderAbility, defenderItem) {
+    const defenderGrounded = isGrounded(defender, defenderAbility, defenderItem);
+    if (field === "エレキフィールド" && move.type === "でんき" && defenderGrounded) return 1.3;
+    if (field === "グラスフィールド" && move.type === "くさ" && defenderGrounded) return 1.3;
+    if (field === "サイコフィールド" && move.type === "エスパー" && defenderGrounded) return 1.3;
     if (field === "グラスフィールド" && ["じしん", "じならし", "マグニチュード"].includes(move.name)) return 0.5;
-    if (field === "ミストフィールド" && move.type === "ドラゴン") return 0.5;
+    if (field === "ミストフィールド" && move.type === "ドラゴン" && defenderGrounded) return 0.5;
     return 1;
   }
 
@@ -1926,6 +2125,67 @@
     return /\d+[%％]の確率|相手を.*状態|ひるませる|下げる/.test(text);
   }
 
+  function defaultHazards() {
+    return { stealthRock: false, spikes: 0 };
+  }
+
+  function cloneHazards(hazards = {}) {
+    return { stealthRock: Boolean(hazards.stealthRock), spikes: clamp(number(hazards.spikes, 0), 0, 3) };
+  }
+
+  function isGrounded(pokemon, ability = "", item = "") {
+    if (!pokemon) return true;
+    if (item === "ふうせん") return false;
+    if (ability === "ふゆう") return false;
+    if ([pokemon.type1, pokemon.type2].includes("ひこう")) return false;
+    return true;
+  }
+
+  function calcEntryHazards(defender, hp, defenderAbility = "", defenderItem = "", hazards = defaultHazards()) {
+    const active = cloneHazards(hazards);
+    const notes = [];
+    if (defenderItem === "あつぞこブーツ" || defenderAbility === "マジックガード") {
+      if (active.stealthRock || active.spikes) notes.push(defenderItem === "あつぞこブーツ" ? "ブーツで設置無効" : "マジックガードで設置無効");
+      return { damage: 0, pct: 0, notes };
+    }
+    let damage = 0;
+    if (active.stealthRock) {
+      const rockEffect = effectiveness("いわ", defender, "", defenderAbility);
+      const rockDamage = rockEffect === 0 ? 0 : Math.max(1, Math.floor((hp / 8) * rockEffect));
+      damage += rockDamage;
+    }
+    const spikesLayers = clamp(number(active.spikes, 0), 0, 3);
+    if (spikesLayers > 0) {
+      if (isGrounded(defender, defenderAbility, defenderItem)) {
+        const rates = { 1: 1 / 8, 2: 1 / 6, 3: 1 / 4 };
+        damage += Math.max(1, Math.floor(hp * rates[spikesLayers]));
+      } else {
+        notes.push("まきびし無効");
+      }
+    }
+    damage = Math.min(hp, damage);
+    return { damage, pct: (damage / hp) * 100, notes };
+  }
+
+  function fixedDamageForMove(move) {
+    if (["ナイトヘッド", "ちきゅうなげ"].includes(move.name)) return LEVEL;
+    return 0;
+  }
+
+  function ignoresDefenseRank(name) {
+    return ["せいなるつるぎ", "DDラリアット", "なしくずし"].includes(name);
+  }
+
+  function koNoteWithEntry(moveMin, moveMax, hp, type, notes = [], entryDamage = 0) {
+    if (type === 0) return ["無効", ...notes].join(" / ");
+    const remaining = Math.max(1, hp - entryDamage);
+    const minHits = Math.max(1, Math.ceil(remaining / Math.max(1, moveMax)));
+    const maxHits = Math.max(1, Math.ceil(remaining / Math.max(1, moveMin)));
+    const rangeText = minHits === maxHits ? `${minHits}発` : `${minHits}-${maxHits}発`;
+    const typeText = type > 1 ? "抜群" : type < 1 ? "半減" : "等倍";
+    return [rangeText, typeText, ...notes].join(" / ");
+  }
+
   function koNote(min, max, hp, type, hits, notes = []) {
     if (type === 0) return ["無効", ...notes].join(" / ");
     const minHits = Math.max(1, Math.ceil(hp / Math.max(1, max)));
@@ -1943,13 +2203,21 @@
   function resultNote(result) {
     if (!result) return "";
     if (!result.ok) return result.reason || "";
-    return `${result.note} / ${result.min}-${result.max}`;
+    const detail = result.entryDamage > 0 ? `技${result.moveMin}-${result.moveMax}+設置${result.entryDamage}` : `${result.min}-${result.max}`;
+    return `${result.note} / ${detail}`;
   }
 
   function displayPower(move) {
     if (move.power) return move.power;
-    if (["くさむすび", "けたぐり", "ヒートスタンプ", "ヘビーボンバー", "ジャイロボール", "エレキボール", "おはかまいり"].includes(move.name)) return "可変";
+    if (["くさむすび", "けたぐり", "ヒートスタンプ", "ヘビーボンバー", "ジャイロボール", "エレキボール", "おはかまいり", "ライジングボルト", "ワイドフォース", "だいちのはどう", "ミストバースト", "はたきおとす"].includes(move.name)) return "可変";
     return "—";
+  }
+
+  function getDexFamily(name) {
+    if (!name) return [];
+    const baseName = state.baseByMega.get(name) || name;
+    const names = [baseName, ...(state.megaByBase.get(baseName) || []).map((entry) => entry.megaName)];
+    return unique(names).filter((pokeName) => state.pokemonByName.has(pokeName) && isPokemonSelectable(pokeName));
   }
 
   function getPokemon(name) {

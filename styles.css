@@ -221,7 +221,7 @@ button {
   top: calc(54px + env(safe-area-inset-top));
   z-index: 18;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -715,6 +715,185 @@ button {
 .toast.show {
   opacity: 1;
   transform: translateY(0);
+}
+
+
+.check-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 52px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  cursor: pointer;
+}
+
+.check-card input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--blue);
+}
+
+.check-card span {
+  display: grid;
+  gap: 2px;
+}
+
+.check-card strong {
+  font-size: 14px;
+}
+
+.check-card small,
+.hazard-preview,
+.dex-guide,
+.dex-relation {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.hazard-preview {
+  font-weight: 800;
+}
+
+.dex-card-list {
+  display: grid;
+  gap: 12px;
+}
+
+.dex-card-top {
+  display: grid;
+  gap: 10px;
+}
+
+.dex-types,
+.dex-actions,
+.ability-list,
+.dex-move-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dex-actions {
+  align-items: center;
+}
+
+.dex-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dex-stats div {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  text-align: center;
+}
+
+.dex-stats span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.dex-stats strong {
+  font-size: 17px;
+}
+
+.dex-section {
+  display: grid;
+  gap: 8px;
+}
+
+.dex-section h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.ability-item {
+  flex: 1 1 220px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.ability-item summary {
+  min-height: 40px;
+  padding: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ability-item p {
+  margin: 0;
+  padding: 0 10px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.dex-move {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 210px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.dex-move.recommended {
+  border-color: var(--blue);
+  background: rgba(17, 103, 232, 0.06);
+}
+
+.dex-move strong {
+  font-size: 13px;
+}
+
+.dex-move span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (min-width: 720px) {
+  .dex-card-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+}
+
+@media (max-width: 430px) {
+  .tabs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dex-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dex-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dex-actions .ghost-button.small {
+    padding: 0 6px;
+    font-size: 11px;
+  }
 }
 
 .type-normal { background: #77808c; }
