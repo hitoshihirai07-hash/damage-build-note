@@ -127,6 +127,7 @@
     teamExportCode: "",
     teamImportCode: "",
     teamImportMode: "merge",
+    teamDamageMode: "offense",
   };
 
   const defaultEv = () => ({ hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 });
@@ -1097,21 +1098,46 @@
   }
 
   function renderTeamDamagePanel() {
-    const defender = getPokemon(state.calc.defenderName);
+    const mode = state.teamDamageMode === "defense" ? "defense" : "offense";
+    const title = mode === "defense" ? "チーム耐久確認" : "チーム火力確認";
+    const meta = mode === "defense"
+      ? `攻撃側：${escapeHtml(state.calc.attackerName)} ${renderTypePills(getPokemon(state.calc.attackerName))}`
+      : `防御側：${escapeHtml(state.calc.defenderName)} ${renderTypePills(getPokemon(state.calc.defenderName))}`;
+    const body = mode === "defense" ? renderTeamDefenseContent() : renderTeamOffenseContent();
+    return `
+      <section class="panel team-damage-panel">
+        <div class="panel-header team-damage-panel-header">
+          <h2>${title}</h2>
+          <span class="panel-meta">${meta}</span>
+        </div>
+        <div class="panel-body team-damage-panel-body">
+          <div class="team-damage-tabs" role="tablist" aria-label="チーム確認切替">
+            <button class="team-damage-tab" type="button" role="tab" aria-selected="${mode === "offense"}" data-action="team-damage-mode" data-mode="offense">火力</button>
+            <button class="team-damage-tab" type="button" role="tab" aria-selected="${mode === "defense"}" data-action="team-damage-mode" data-mode="defense">耐久</button>
+          </div>
+          ${body}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderTeamOffenseContent() {
     const rows = state.saved.length
       ? state.saved.map((build) => renderTeamDamageCard(build)).join("")
       : `<p class="empty-state">保存した育成があると、チーム全体で現在の防御側にどれくらい入るか確認できます。</p>`;
     return `
-      <section class="panel team-damage-panel">
-        <div class="panel-header">
-          <h2>チーム火力確認</h2>
-          <span class="panel-meta">防御側：${escapeHtml(state.calc.defenderName)} ${renderTypePills(defender)}</span>
-        </div>
-        <div class="panel-body">
-          <p class="empty-state">ダメージ計算タブの防御側・条件・設置技を使って、保存済み育成の4技と2技合わせをまとめて確認します。</p>
-          <div class="team-damage-list">${rows}</div>
-        </div>
-      </section>
+      <p class="empty-state">ダメージ計算タブの防御側・条件・設置技を使って、保存済み育成の4技と2技合わせをまとめて確認します。</p>
+      <div class="team-damage-list">${rows}</div>
+    `;
+  }
+
+  function renderTeamDefenseContent() {
+    const rows = state.saved.length
+      ? state.saved.map((build) => renderTeamDefenseCard(build)).join("")
+      : `<p class="empty-state">保存した育成があると、現在の攻撃側からチーム全体がどれくらい受けるか確認できます。</p>`;
+    return `
+      <p class="empty-state">ダメージ計算タブの攻撃側・4技・条件を使って、保存済み育成を防御側にした時の被ダメージをまとめて確認します。</p>
+      <div class="team-damage-list">${rows}</div>
     `;
   }
 
@@ -1132,6 +1158,32 @@
         <div class="team-damage-summary">
           <div><strong>最大</strong><span>${best ? `${escapeHtml(best.move?.name || "-")}：${escapeHtml(resultLabel(best))}` : "—"}</span></div>
           <div><strong>2技</strong><span>${escapeHtml(combo.label)}</span></div>
+        </div>
+        <small class="team-damage-note">${escapeHtml(combo.note)}</small>
+        <div class="team-damage-moves">${moveRows}</div>
+      </article>
+    `;
+  }
+
+  function renderTeamDefenseCard(build) {
+    const results = calcAllMoves(teamDefenseConfig(build));
+    const worst = bestSingleDamage(results);
+    const combo = calcBestTwoMoveDamage(results);
+    const moveRows = results.map((result, index) => renderTeamDamageMove(index, result)).join("");
+    const danger = teamDefenseDanger(worst, combo);
+    return `
+      <article class="team-damage-card team-defense-card ${escapeAttr(danger.className)}">
+        <div class="team-damage-head">
+          <div>
+            <h3>${escapeHtml(build.nickname || build.name)}</h3>
+            <p>${escapeHtml(build.name)} / ${escapeHtml(build.nature)} / ${escapeHtml(build.item || "道具なし")} / ${escapeHtml(build.ability || defaultAbility(build.name))}</p>
+          </div>
+          <button class="ghost-button small" type="button" data-action="load-build-defender" data-id="${escapeAttr(build.id)}">防御側へ</button>
+        </div>
+        <div class="team-damage-summary team-defense-summary">
+          <div><strong>最大被ダメ</strong><span>${worst ? `${escapeHtml(worst.move?.name || "-")}：${escapeHtml(resultLabel(worst))}` : "—"}</span></div>
+          <div><strong>2技被ダメ</strong><span>${escapeHtml(combo.label)}</span></div>
+          <div><strong>耐久目安</strong><span>${escapeHtml(danger.label)}</span></div>
         </div>
         <small class="team-damage-note">${escapeHtml(combo.note)}</small>
         <div class="team-damage-moves">${moveRows}</div>
@@ -1506,6 +1558,11 @@
     }
     if (action === "calc-section") {
       state.calcSection = target.dataset.section || "moves";
+      render();
+      return;
+    }
+    if (action === "team-damage-mode") {
+      state.teamDamageMode = target.dataset.mode === "defense" ? "defense" : "offense";
       render();
       return;
     }
@@ -2178,6 +2235,55 @@
       metronomeCount: state.calc.metronomeCount,
       defenderHazards: cloneHazards(state.calc.defenderHazards),
     };
+  }
+
+  function teamDefenseConfig(build) {
+    return {
+      attackerName: state.calc.attackerName,
+      attackerNature: state.calc.attackerNature,
+      attackerItem: state.calc.attackerItem,
+      attackerAbility: state.calc.attackerAbility || defaultAbility(state.calc.attackerName),
+      attackerEv: cloneEv(state.calc.attackerEv),
+      attackerRank: cloneRank(state.calc.attackerRank),
+      defenderName: build.name,
+      defenderNature: build.nature,
+      defenderItem: build.item,
+      defenderAbility: build.ability || defaultAbility(build.name),
+      defenderEv: cloneEv(build.ev),
+      defenderRank: defaultRank(),
+      moves: state.calc.moves.slice(0, 4),
+      moveHits: (state.calc.moveHits || ["", "", "", ""]).slice(0, 4),
+      weather: state.calc.weather,
+      field: state.calc.field,
+      reflect: state.calc.reflect,
+      attackerStatus: state.calc.attackerStatus,
+      defenderStatus: state.calc.defenderStatus,
+      attackerHpCondition: state.calc.attackerHpCondition,
+      defenderHpCondition: state.calc.defenderHpCondition,
+      allyFainted: state.calc.allyFainted,
+      criticalHit: state.calc.criticalHit,
+      attackerMovedLast: state.calc.attackerMovedLast,
+      targetSwitched: state.calc.targetSwitched,
+      flashFireBoost: state.calc.flashFireBoost,
+      chargedBoost: state.calc.chargedBoost,
+      plusMinusActive: state.calc.plusMinusActive,
+      unburdenActive: state.calc.unburdenActive,
+      slowStartActive: state.calc.slowStartActive,
+      eelBoostActive: state.calc.eelBoostActive,
+      rivalry: state.calc.rivalry,
+      metronomeCount: state.calc.metronomeCount,
+      defenderHazards: cloneHazards(state.calc.defenderHazards),
+    };
+  }
+
+  function teamDefenseDanger(worst, combo) {
+    const maxPct = worst?.ok ? worst.maxPct : 0;
+    const comboLabel = combo?.label || "";
+    if (comboLabel.includes("確定") || maxPct >= 100) return { label: "危険", className: "danger" };
+    if (comboLabel.includes("乱数") || maxPct >= 75) return { label: "注意", className: "warning" };
+    if (maxPct >= 50) return { label: "中程度", className: "middle" };
+    if (worst?.ok) return { label: "余裕あり", className: "safe" };
+    return { label: "判定なし", className: "middle" };
   }
 
   function bestSingleDamage(results) {

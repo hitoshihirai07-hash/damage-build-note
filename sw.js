@@ -1,4 +1,4 @@
-const CACHE_NAME = "damage-build-note-v10";
+const CACHE_NAME = "damage-build-note-v11";
 const APP_SHELL = [
   "./",
   "./index.html",
