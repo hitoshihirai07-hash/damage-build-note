@@ -828,7 +828,6 @@
       ? state.dexName
       : firstSelectablePokemon()?.name;
     state.dexName = selected || "";
-    const family = getDexFamily(selected);
     return `
       <main class="view dex-view">
         <section class="panel">
@@ -841,61 +840,141 @@
               <label for="dex-name">ポケモン検索</label>
               <input id="dex-name" list="pokemon-options" data-field="dex-name" value="${escapeAttr(state.dexName)}" autocomplete="off" />
             </div>
-            <div class="dex-guide">メガ進化があるポケモンは通常形態とメガ後をまとめて表示します。各カードから育成登録・ダメージ計算へ反映できます。</div>
+            <div class="dex-guide">メガ進化があるポケモンは通常形態の下にメガ後の種族値を表示します。技一覧は共通で1回だけ表示します。</div>
           </div>
         </section>
-        <div class="dex-card-list">
-          ${family.map((name) => renderDexCard(name)).join("")}
-        </div>
+        ${renderDexFamilyCard(selected)}
       </main>
     `;
   }
 
-  function renderDexCard(name) {
-    const pokemon = getPokemon(name);
-    const stats = pokemon.stats || {};
-    const abilities = getAbilityOptions(name);
-    const moves = getMoves(name);
-    const rank = getRankingForPokemon(name);
+  function renderDexFamilyCard(selectedName) {
+    const baseName = state.baseByMega.get(selectedName) || selectedName;
+    const basePokemon = getPokemon(baseName);
+    const megaNames = (state.megaByBase.get(baseName) || [])
+      .map((entry) => entry.megaName)
+      .filter((name) => state.pokemonByName.has(name) && isPokemonSelectable(name));
+    const forms = unique([baseName, ...megaNames]).filter((name) => state.pokemonByName.has(name) && isPokemonSelectable(name));
+    const rank = getRankingForPokemon(selectedName) || getRankingForPokemon(baseName);
     const rankedNames = new Set(getRankedMoveNames(rank).map(moveKey));
-    const baseName = state.baseByMega.get(name);
-    const megaNames = state.megaByBase.get(name)?.map((entry) => entry.megaName) || [];
-    const relation = baseName ? `通常形態：${baseName}` : megaNames.length ? `メガ進化：${megaNames.join(" / ")}` : "メガ進化なし";
+    const moves = getMoves(selectedName || baseName);
+    const relation = megaNames.length ? `メガ進化：${megaNames.join(" / ")}` : "メガ進化なし";
     return `
       <article class="panel dex-card">
         <div class="panel-header">
-          <h2>${escapeHtml(name)}</h2>
-          <span class="panel-meta">No.${escapeHtml(pokemon.no || "-")} / ${escapeHtml(relation)}</span>
+          <h2>${escapeHtml(baseName)}</h2>
+          <span class="panel-meta">No.${escapeHtml(basePokemon.no || "-")} / ${escapeHtml(relation)}</span>
         </div>
-        <div class="panel-body">
-          <div class="dex-card-top">
-            <div>
-              <div class="dex-types">${renderTypePills(pokemon)}</div>
-              <p class="dex-relation">${escapeHtml(relation)}</p>
+        <div class="panel-body dex-family-body">
+          <section class="dex-section dex-stat-section">
+            <div class="dex-section-title">
+              <h3>種族値・能力値目安</h3>
+              <p>Lv.50 / 個体値31 / 努力値32ポイント＝252相当で表示しています。</p>
             </div>
-            <div class="dex-actions">
-              <button class="ghost-button small" type="button" data-action="apply-dex" data-target="build" data-name="${escapeAttr(name)}">育成へ</button>
-              <button class="ghost-button small" type="button" data-action="apply-dex" data-target="attacker" data-name="${escapeAttr(name)}">攻撃側へ</button>
-              <button class="ghost-button small" type="button" data-action="apply-dex" data-target="defender" data-name="${escapeAttr(name)}">防御側へ</button>
-            </div>
-          </div>
-          <div class="dex-stats">
-            ${STAT_KEYS.map((stat) => `<div><span>${stat.label}</span><strong>${stats[stat.key] ?? "-"}</strong></div>`).join("")}
-          </div>
-          <section class="dex-section">
-            <h3>特性</h3>
-            <div class="ability-list">
-              ${abilities.length ? abilities.map((ability) => renderAbilityDexItem(ability)).join("") : `<p class="empty-state">特性データなし</p>`}
+            <div class="dex-form-list">
+              ${forms.map((name, index) => renderDexFormStats(name, index === 0 ? "通常形態" : "メガ後")).join("")}
             </div>
           </section>
           <section class="dex-section">
-            <h3>技</h3>
+            <h3>特性</h3>
+            <div class="dex-ability-form-list">
+              ${forms.map((name) => renderDexAbilityGroup(name)).join("")}
+            </div>
+          </section>
+          <section class="dex-section">
+            <div class="dex-section-title">
+              <h3>覚える技</h3>
+              <p>通常形態とメガ後で覚える技は同じ扱いのため、共通一覧として表示します。</p>
+            </div>
             <div class="dex-move-list">
               ${moves.length ? moves.map((move) => renderDexMoveTag(move, rankedNames)).join("") : `<p class="empty-state">技データなし</p>`}
             </div>
           </section>
         </div>
       </article>
+    `;
+  }
+
+  function renderDexFormStats(name, formLabel) {
+    const pokemon = getPokemon(name);
+    const stats = pokemon.stats || {};
+    return `
+      <article class="dex-form-card">
+        <div class="dex-form-header">
+          <div>
+            <h4>${escapeHtml(formLabel)}：${escapeHtml(name)}</h4>
+            <div class="dex-types">${renderTypePills(pokemon)}</div>
+          </div>
+          <div class="dex-actions">
+            <button class="ghost-button small" type="button" data-action="apply-dex" data-target="build" data-name="${escapeAttr(name)}">育成へ</button>
+            <button class="ghost-button small" type="button" data-action="apply-dex" data-target="attacker" data-name="${escapeAttr(name)}">攻撃側へ</button>
+            <button class="ghost-button small" type="button" data-action="apply-dex" data-target="defender" data-name="${escapeAttr(name)}">防御側へ</button>
+          </div>
+        </div>
+        <div class="dex-stats">
+          ${STAT_KEYS.map((stat) => renderDexStatCell(pokemon, stat, stats[stat.key])).join("")}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderDexStatCell(pokemon, stat, baseValue) {
+    const value = Number.isFinite(number(baseValue, NaN)) ? number(baseValue, 0) : null;
+    const guide = value == null ? [] : getStatBenchmarks(pokemon, stat);
+    return `
+      <div>
+        <span>${stat.label}</span>
+        <strong>${value == null ? "-" : value}</strong>
+        ${guide.length ? `<small>${guide.map((item) => `${escapeHtml(item.label)} ${item.value}`).join(" / ")}</small>` : ""}
+      </div>
+    `;
+  }
+
+  function getStatBenchmarks(pokemon, stat) {
+    const base = number(pokemon.stats?.[stat.key], NaN);
+    if (!Number.isFinite(base)) return [];
+    if (stat.key === "hp") {
+      return [
+        { label: "無振り", value: calcLv50Stat(base, stat.key, 0, 1) },
+        { label: "H32", value: calcLv50Stat(base, stat.key, POINT_MAX, 1) },
+      ];
+    }
+    if (stat.key === "spe") {
+      return [
+        { label: "最速", value: calcLv50Stat(base, stat.key, POINT_MAX, 1.1) },
+        { label: "準速", value: calcLv50Stat(base, stat.key, POINT_MAX, 1) },
+        { label: "無振り", value: calcLv50Stat(base, stat.key, 0, 1) },
+        { label: "下降0", value: calcLv50Stat(base, stat.key, 0, 0.9) },
+      ];
+    }
+    return [
+      { label: `${statShortLabel(stat.key)}32↑`, value: calcLv50Stat(base, stat.key, POINT_MAX, 1.1) },
+      { label: `${statShortLabel(stat.key)}32`, value: calcLv50Stat(base, stat.key, POINT_MAX, 1) },
+      { label: "無振り", value: calcLv50Stat(base, stat.key, 0, 1) },
+      { label: "下降0", value: calcLv50Stat(base, stat.key, 0, 0.9) },
+    ];
+  }
+
+  function statShortLabel(key) {
+    return ({ atk: "A", def: "B", spa: "C", spd: "D", spe: "S" })[key] || "";
+  }
+
+  function calcLv50Stat(base, key, points, natureMod) {
+    const effort = effortToLegacyEv(points);
+    if (key === "hp") return Math.floor(((2 * base + IV + Math.floor(effort / 4)) * LEVEL) / 100) + LEVEL + 10;
+    const raw = Math.floor(((2 * base + IV + Math.floor(effort / 4)) * LEVEL) / 100) + 5;
+    return Math.floor(raw * natureMod);
+  }
+
+  function renderDexAbilityGroup(name) {
+    const abilities = getAbilityOptions(name);
+    return `
+      <div class="dex-ability-group">
+        <h4>${escapeHtml(name)}</h4>
+        <div class="ability-list">
+          ${abilities.length ? abilities.map((ability) => renderAbilityDexItem(ability)).join("") : `<p class="empty-state">特性データなし</p>`}
+        </div>
+      </div>
     `;
   }
 

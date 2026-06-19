@@ -760,12 +760,17 @@ button {
   font-weight: 800;
 }
 
-.dex-card-list {
+.dex-card-list,
+.dex-family-body,
+.dex-form-list,
+.dex-ability-form-list {
   display: grid;
   gap: 12px;
 }
 
-.dex-card-top {
+.dex-card-top,
+.dex-form-card,
+.dex-ability-group {
   display: grid;
   gap: 10px;
 }
@@ -783,6 +788,29 @@ button {
   align-items: center;
 }
 
+.dex-form-card,
+.dex-ability-group {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.dex-form-card + .dex-form-card {
+  margin-top: 2px;
+}
+
+.dex-form-header {
+  display: grid;
+  gap: 10px;
+}
+
+.dex-form-header h4,
+.dex-ability-group h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
 .dex-stats {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -792,6 +820,7 @@ button {
 .dex-stats div {
   display: grid;
   gap: 2px;
+  min-height: 96px;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -809,14 +838,34 @@ button {
   font-size: 17px;
 }
 
+.dex-stats small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .dex-section {
   display: grid;
   gap: 8px;
 }
 
-.dex-section h3 {
+.dex-section h3,
+.dex-section-title h3 {
   margin: 0;
   font-size: 15px;
+}
+
+.dex-section-title {
+  display: grid;
+  gap: 3px;
+}
+
+.dex-section-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .ability-item {
@@ -870,7 +919,8 @@ button {
 }
 
 @media (min-width: 720px) {
-  .dex-card-top {
+  .dex-card-top,
+  .dex-form-header {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
   }
