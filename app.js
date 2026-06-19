@@ -7,6 +7,8 @@
   const POINT_TOTAL = 66;
   const POINT_MAX = 32;
   const STORAGE_KEY = "damage-build-note-v1";
+  const MAX_SAVED_BUILDS = 60;
+  const EXPORT_CODE_PREFIX = "DBN1:";
   const APP_NAME = "Damage Build Note";
   const SEASON_ALL = "all";
 
@@ -122,6 +124,9 @@
     calc: null,
     dexName: "",
     saved: [],
+    teamExportCode: "",
+    teamImportCode: "",
+    teamImportMode: "merge",
   };
 
   const defaultEv = () => ({ hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 });
@@ -362,14 +367,15 @@
   function restoreSaved() {
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-      state.saved = Array.isArray(parsed) ? parsed : [];
+      state.saved = normalizeSavedList(parsed);
     } catch {
       state.saved = [];
     }
   }
 
   function persistSaved() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.saved.slice(0, 24)));
+    state.saved = normalizeSavedList(state.saved).slice(0, MAX_SAVED_BUILDS);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.saved));
   }
 
   function createInitialState() {
@@ -994,47 +1000,149 @@
   }
 
   function renderTeamView() {
+    return `
+      <main class="view team-view">
+        ${renderTeamSavePanel()}
+        ${renderTeamTransferPanel()}
+        ${renderTeamDamagePanel()}
+      </main>
+    `;
+  }
+
+  function renderTeamSavePanel() {
     const cards = state.saved.length
-      ? state.saved
-          .map((build) => {
-            const moveTags = build.moves.filter(Boolean).map((move) => `<span class="tag">${escapeHtml(move)}</span>`).join("");
-            return `
-              <article class="team-card">
-                <div class="team-card-header">
-                  <div>
-                    <h3>${escapeHtml(build.nickname || build.name)}</h3>
-                    <p>${escapeHtml(build.name)} / ${escapeHtml(build.nature)} / ${formatEv(build.ev)}</p>
-                  </div>
-                  <button class="danger-button" type="button" data-action="delete-build" data-id="${build.id}">削除</button>
-                </div>
-                <div class="tag-list">${moveTags}</div>
-                <div class="quick-actions">
-                  <button class="ghost-button" type="button" data-action="load-build" data-id="${build.id}">開く</button>
-                  <button class="ghost-button" type="button" data-action="load-build-calc" data-id="${build.id}">計算へ</button>
-                </div>
-              </article>
-            `;
-          })
-          .join("")
+      ? state.saved.map((build, index) => renderTeamCard(build, index)).join("")
       : `<p class="empty-state">保存した育成はまだありません。</p>`;
 
     return `
-      <main class="view">
-        <section class="panel">
-          <div class="panel-header">
-            <h2>チーム</h2>
-            <span class="panel-meta">${state.saved.length}件</span>
+      <section class="panel">
+        <div class="panel-header">
+          <h2>チーム</h2>
+          <span class="panel-meta">${state.saved.length}件</span>
+        </div>
+        <div class="panel-body">
+          <div class="wide-actions">
+            <button class="primary-button secondary" type="button" data-action="save">現在の育成を保存</button>
+            <button class="ghost-button" type="button" data-action="new-build">新規作成</button>
           </div>
-          <div class="panel-body">
-            <div class="wide-actions">
-              <button class="primary-button secondary" type="button" data-action="save">現在の育成を保存</button>
-              <button class="ghost-button" type="button" data-action="new-build">新規作成</button>
-            </div>
-            <div class="team-list">${cards}</div>
-          </div>
-        </section>
-      </main>
+          <div class="team-list">${cards}</div>
+        </div>
+      </section>
     `;
+  }
+
+  function renderTeamCard(build, index) {
+    const moveTags = build.moves.filter(Boolean).map((move) => `<span class="tag">${escapeHtml(move)}</span>`).join("");
+    return `
+      <article class="team-card">
+        <div class="team-card-header">
+          <div>
+            <h3>${escapeHtml(build.nickname || build.name)}</h3>
+            <p>${escapeHtml(build.name)} / ${escapeHtml(build.nature)} / ${escapeHtml(build.item || "道具なし")} / ${formatEv(build.ev)}</p>
+          </div>
+          <button class="danger-button" type="button" data-action="delete-build" data-id="${escapeAttr(build.id)}">削除</button>
+        </div>
+        <div class="tag-list">${moveTags || `<span class="tag">技未登録</span>`}</div>
+        <div class="team-card-actions">
+          <button class="ghost-button small" type="button" data-action="move-build-up" data-id="${escapeAttr(build.id)}" ${index === 0 ? "disabled" : ""}>上へ</button>
+          <button class="ghost-button small" type="button" data-action="move-build-down" data-id="${escapeAttr(build.id)}" ${index >= state.saved.length - 1 ? "disabled" : ""}>下へ</button>
+          <button class="ghost-button small" type="button" data-action="load-build" data-id="${escapeAttr(build.id)}">開く</button>
+          <button class="ghost-button small" type="button" data-action="load-build-calc" data-id="${escapeAttr(build.id)}">攻撃側へ</button>
+          <button class="ghost-button small" type="button" data-action="load-build-defender" data-id="${escapeAttr(build.id)}">防御側へ</button>
+        </div>
+        <label class="team-note-field">
+          <span>メモ</span>
+          <textarea rows="2" data-field="team-note" data-id="${escapeAttr(build.id)}" placeholder="役割、選出時の注意、調整理由など">${escapeHtml(build.note || "")}</textarea>
+        </label>
+      </article>
+    `;
+  }
+
+  function renderTeamTransferPanel() {
+    return `
+      <section class="panel transfer-panel">
+        <div class="panel-header">
+          <h2>保存・読み込み</h2>
+          <span class="panel-meta">ログインなし</span>
+        </div>
+        <div class="panel-body transfer-body">
+          <p class="empty-state">スマホでは「保存コードを作成」→「コピー/共有」→別端末で貼り付けて読み込み、が一番扱いやすいです。</p>
+          <div class="wide-actions transfer-actions">
+            <button class="primary-button" type="button" data-action="generate-export-code">保存コードを作成</button>
+            <button class="ghost-button" type="button" data-action="copy-export-code">コピー</button>
+            <button class="ghost-button" type="button" data-action="share-export-code">共有</button>
+          </div>
+          <label class="team-code-field">
+            <span>保存コード</span>
+            <textarea rows="4" readonly data-field="team-export-code" placeholder="保存コードを作成するとここに表示されます">${escapeHtml(state.teamExportCode)}</textarea>
+          </label>
+          <div class="field import-mode-field">
+            <label for="team-import-mode">読み込み方法</label>
+            <select id="team-import-mode" data-field="team-import-mode" class="plain-select">
+              ${option("追加する", state.teamImportMode, "merge")}
+              ${option("上書きする", state.teamImportMode, "replace")}
+            </select>
+          </div>
+          <label class="team-code-field">
+            <span>読み込みコード</span>
+            <textarea rows="4" data-field="team-import-code" placeholder="別端末でコピーした保存コードを貼り付け">${escapeHtml(state.teamImportCode)}</textarea>
+          </label>
+          <div class="wide-actions">
+            <button class="primary-button secondary" type="button" data-action="import-saved-code">貼り付けたコードを読み込み</button>
+            <button class="ghost-button" type="button" data-action="clear-transfer-code">入力欄を空にする</button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderTeamDamagePanel() {
+    const defender = getPokemon(state.calc.defenderName);
+    const rows = state.saved.length
+      ? state.saved.map((build) => renderTeamDamageCard(build)).join("")
+      : `<p class="empty-state">保存した育成があると、チーム全体で現在の防御側にどれくらい入るか確認できます。</p>`;
+    return `
+      <section class="panel team-damage-panel">
+        <div class="panel-header">
+          <h2>チーム火力確認</h2>
+          <span class="panel-meta">防御側：${escapeHtml(state.calc.defenderName)} ${renderTypePills(defender)}</span>
+        </div>
+        <div class="panel-body">
+          <p class="empty-state">ダメージ計算タブの防御側・条件・設置技を使って、保存済み育成の4技と2技合わせをまとめて確認します。</p>
+          <div class="team-damage-list">${rows}</div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderTeamDamageCard(build) {
+    const results = calcAllMoves(teamDamageConfig(build));
+    const best = bestSingleDamage(results);
+    const combo = calcBestTwoMoveDamage(results);
+    const moveRows = results.map((result, index) => renderTeamDamageMove(index, result)).join("");
+    return `
+      <article class="team-damage-card">
+        <div class="team-damage-head">
+          <div>
+            <h3>${escapeHtml(build.nickname || build.name)}</h3>
+            <p>${escapeHtml(build.nature)} / ${escapeHtml(build.item || "道具なし")} / ${escapeHtml(build.ability || defaultAbility(build.name))}</p>
+          </div>
+          <button class="ghost-button small" type="button" data-action="load-build-calc" data-id="${escapeAttr(build.id)}">計算へ</button>
+        </div>
+        <div class="team-damage-summary">
+          <div><strong>最大</strong><span>${best ? `${escapeHtml(best.move?.name || "-")}：${escapeHtml(resultLabel(best))}` : "—"}</span></div>
+          <div><strong>2技</strong><span>${escapeHtml(combo.label)}</span></div>
+        </div>
+        <small class="team-damage-note">${escapeHtml(combo.note)}</small>
+        <div class="team-damage-moves">${moveRows}</div>
+      </article>
+    `;
+  }
+
+  function renderTeamDamageMove(index, result) {
+    const name = result?.move?.name || `${index + 1}. 未選択`;
+    const label = result?.ok ? resultLabel(result) : (result?.reason || "—");
+    return `<div class="team-damage-move"><span>${index + 1}. ${escapeHtml(name)}</span><strong>${escapeHtml(label)}</strong></div>`;
   }
 
   function renderBasicPanel(mode) {
@@ -1408,7 +1516,15 @@
     if (action === "new-build") newBuild();
     if (action === "load-build") loadBuild(target.dataset.id, false);
     if (action === "load-build-calc") loadBuild(target.dataset.id, true);
+    if (action === "load-build-defender") applySavedToCalcDefender(target.dataset.id);
+    if (action === "move-build-up") moveSavedBuild(target.dataset.id, -1);
+    if (action === "move-build-down") moveSavedBuild(target.dataset.id, 1);
     if (action === "delete-build") deleteBuild(target.dataset.id);
+    if (action === "generate-export-code") generateExportCode();
+    if (action === "copy-export-code") copyExportCode();
+    if (action === "share-export-code") shareExportCode();
+    if (action === "import-saved-code") importSavedCode();
+    if (action === "clear-transfer-code") clearTransferCode();
     if (action === "switch-pokemon") updatePokemon(target.dataset.mode, target.dataset.name);
     if (action === "apply-dex") applyDexPokemon(target.dataset.target, target.dataset.name);
     if (action === "install-app") installApp();
@@ -1422,6 +1538,12 @@
     }
     if (target.dataset.field === "nickname") {
       state.build.nickname = target.value;
+    }
+    if (target.dataset.field === "team-note") {
+      updateSavedNote(target.dataset.id, target.value);
+    }
+    if (target.dataset.field === "team-import-code") {
+      state.teamImportCode = target.value;
     }
   });
 
@@ -1486,6 +1608,8 @@
     if (field === "metronome-count") state.calc.metronomeCount = number(target.value, 1);
     if (field === "combo-first") state.calc.comboFirst = number(target.value, 0);
     if (field === "combo-second") state.calc.comboSecond = number(target.value, 1);
+    if (field === "team-import-mode") state.teamImportMode = target.value;
+    if (field === "team-import-code") state.teamImportCode = target.value;
     if (field === "defender-hazard-stealth-rock") state.calc.defenderHazards.stealthRock = target.checked;
     if (field === "defender-hazard-spikes") state.calc.defenderHazards.spikes = number(target.value, 0);
     if (field === "rank") { setRank(target.dataset.mode, target.dataset.stat, target.value); return; }
@@ -1740,7 +1864,7 @@
 
   function saveCurrentBuild() {
     const id = `${state.build.name}-${Date.now()}`;
-    const snapshot = {
+    const snapshot = normalizeSavedBuild({
       id,
       name: state.build.name,
       nickname: state.build.nickname,
@@ -1750,9 +1874,15 @@
       ev: cloneEv(state.build.ev),
       moves: state.build.moves.slice(0, 4),
       moveHits: (state.build.moveHits || ["", "", "", ""]).slice(0, 4),
+      note: "",
       updatedAt: Date.now(),
-    };
-    state.saved = [snapshot, ...state.saved].slice(0, 24);
+    }, 0);
+    if (!snapshot) {
+      showToast("保存できませんでした");
+      return;
+    }
+    state.saved = [snapshot, ...state.saved].slice(0, MAX_SAVED_BUILDS);
+    state.teamExportCode = "";
     persistSaved();
     showToast("育成を保存しました");
     render();
@@ -1762,15 +1892,7 @@
     const saved = state.saved.find((item) => item.id === id);
     if (!saved) return;
     if (toCalc) {
-      state.calc.attackerName = saved.name;
-      state.calc.attackerNature = saved.nature;
-      state.calc.attackerItem = saved.item;
-      state.calc.attackerAbility = saved.ability || defaultAbility(saved.name);
-      state.calc.attackerEv = cloneEv(saved.ev);
-      state.calc.moves = saved.moves.slice(0, 4);
-      state.calc.moveHits = (saved.moveHits || ["", "", "", ""]).slice(0, 4);
-      state.activeView = "calc";
-      state.calcSection = "moves";
+      applySavedToCalcAttacker(saved);
     } else {
       state.build = {
         name: saved.name,
@@ -1788,10 +1910,307 @@
     render();
   }
 
+  function applySavedToCalcAttacker(saved) {
+    state.calc.attackerName = saved.name;
+    state.calc.attackerNature = saved.nature;
+    state.calc.attackerItem = saved.item;
+    state.calc.attackerAbility = saved.ability || defaultAbility(saved.name);
+    state.calc.attackerEv = cloneEv(saved.ev);
+    state.calc.moves = saved.moves.slice(0, 4);
+    state.calc.moveHits = (saved.moveHits || ["", "", "", ""]).slice(0, 4);
+    state.activeView = "calc";
+    state.calcSection = "moves";
+  }
+
+  function applySavedToCalcDefender(id) {
+    const saved = state.saved.find((item) => item.id === id);
+    if (!saved) return;
+    state.calc.defenderName = saved.name;
+    state.calc.defenderNature = saved.nature;
+    state.calc.defenderItem = saved.item;
+    state.calc.defenderAbility = saved.ability || defaultAbility(saved.name);
+    state.calc.defenderEv = cloneEv(saved.ev);
+    state.activeView = "calc";
+    state.calcSection = "defender";
+    render();
+  }
+
   function deleteBuild(id) {
     state.saved = state.saved.filter((item) => item.id !== id);
+    state.teamExportCode = "";
     persistSaved();
     render();
+  }
+
+  function moveSavedBuild(id, delta) {
+    const index = state.saved.findIndex((item) => item.id === id);
+    const next = index + delta;
+    if (index < 0 || next < 0 || next >= state.saved.length) return;
+    const copy = state.saved.slice();
+    const [item] = copy.splice(index, 1);
+    copy.splice(next, 0, item);
+    state.saved = copy;
+    state.teamExportCode = "";
+    persistSaved();
+    render();
+  }
+
+  function updateSavedNote(id, note) {
+    const saved = state.saved.find((item) => item.id === id);
+    if (!saved) return;
+    saved.note = String(note || "").slice(0, 300);
+    state.teamExportCode = "";
+    persistSaved();
+  }
+
+
+  function buildExportPayload() {
+    return {
+      type: "damage-build-note-saved-builds",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      count: state.saved.length,
+      builds: state.saved.map((build) => ({
+        id: build.id,
+        name: build.name,
+        nickname: build.nickname || "",
+        nature: build.nature || "まじめ",
+        item: build.item || "",
+        ability: build.ability || "",
+        ev: cloneEv(build.ev),
+        moves: (build.moves || []).slice(0, 4),
+        moveHits: (build.moveHits || ["", "", "", ""]).slice(0, 4),
+        note: build.note || "",
+        updatedAt: build.updatedAt || Date.now(),
+      })),
+    };
+  }
+
+  function generateExportCode() {
+    state.teamExportCode = encodeShareCode(buildExportPayload());
+    showToast(`${state.saved.length}件の保存コードを作成しました`);
+    render();
+  }
+
+  async function copyExportCode() {
+    if (!state.teamExportCode) state.teamExportCode = encodeShareCode(buildExportPayload());
+    try {
+      await navigator.clipboard.writeText(state.teamExportCode);
+      showToast("保存コードをコピーしました");
+    } catch {
+      showToast("コピーできない場合は保存コード欄を長押ししてコピーしてください");
+    }
+    render();
+  }
+
+  async function shareExportCode() {
+    if (!state.teamExportCode) state.teamExportCode = encodeShareCode(buildExportPayload());
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Damage Build Note 保存コード", text: state.teamExportCode });
+        showToast("保存コードを共有しました");
+        render();
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+    await copyExportCode();
+  }
+
+  function importSavedCode() {
+    const code = (state.teamImportCode || "").trim();
+    if (!code) {
+      showToast("読み込みコードを貼り付けてください");
+      return;
+    }
+    let payload;
+    try {
+      payload = decodeShareCode(code);
+    } catch {
+      showToast("保存コードを読み込めませんでした");
+      return;
+    }
+    const imported = normalizeSavedList(payload);
+    if (!imported.length) {
+      showToast("読み込める育成がありませんでした");
+      return;
+    }
+    const before = state.saved.slice();
+    try {
+      state.saved = state.teamImportMode === "replace" ? imported : mergeSavedBuilds(imported, state.saved);
+      state.saved = state.saved.slice(0, MAX_SAVED_BUILDS);
+      state.teamExportCode = "";
+      persistSaved();
+      showToast(`${imported.length}件読み込みました`);
+      render();
+    } catch {
+      state.saved = before;
+      persistSaved();
+      showToast("読み込みに失敗したため元に戻しました");
+      render();
+    }
+  }
+
+  function clearTransferCode() {
+    state.teamImportCode = "";
+    state.teamExportCode = "";
+    render();
+  }
+
+  function encodeShareCode(payload) {
+    const json = JSON.stringify(payload);
+    return `${EXPORT_CODE_PREFIX}${base64EncodeUnicode(json)}`;
+  }
+
+  function decodeShareCode(value) {
+    const text = String(value || "").trim();
+    const raw = text.startsWith(EXPORT_CODE_PREFIX) ? base64DecodeUnicode(text.slice(EXPORT_CODE_PREFIX.length).replace(/\s+/g, "")) : text.startsWith("{") || text.startsWith("[") ? text : base64DecodeUnicode(text.replace(/\s+/g, ""));
+    return JSON.parse(raw);
+  }
+
+  function base64EncodeUnicode(value) {
+    return btoa(unescape(encodeURIComponent(value)));
+  }
+
+  function base64DecodeUnicode(value) {
+    return decodeURIComponent(escape(atob(value)));
+  }
+
+  function mergeSavedBuilds(imported, current) {
+    const merged = [];
+    const seen = new Set();
+    [...imported, ...current].forEach((build) => {
+      const key = savedBuildKey(build);
+      if (seen.has(key)) return;
+      seen.add(key);
+      merged.push(build);
+    });
+    return merged;
+  }
+
+  function normalizeSavedList(value) {
+    const list = Array.isArray(value) ? value : Array.isArray(value?.builds) ? value.builds : [];
+    return list.map((item, index) => normalizeSavedBuild(item, index)).filter(Boolean).slice(0, MAX_SAVED_BUILDS);
+  }
+
+  function normalizeSavedBuild(raw, index = 0) {
+    if (!raw || typeof raw !== "object") return null;
+    const name = String(raw.name || "").trim();
+    if (!state.pokemonByName.has(name)) return null;
+    const ev = normalizeEvPoints(raw.ev || defaultEv());
+    const moves = (Array.isArray(raw.moves) ? raw.moves : [])
+      .map((nameText) => findMoveInList(getMoves(name), nameText) || findAnyMove(nameText))
+      .filter(Boolean)
+      .map((move) => move.name)
+      .filter((moveName, moveIndex, all) => all.findIndex((value) => moveKey(value) === moveKey(moveName)) === moveIndex)
+      .slice(0, 4);
+    while (moves.length < 4) moves.push("");
+    const abilityOptions = getAbilityOptions(name);
+    const ability = abilityOptions.includes(raw.ability) ? raw.ability : defaultAbility(name);
+    const nature = NATURES.some((item) => item.name === raw.nature) ? raw.nature : (parseRankNature(getRankingForPokemon(name)) || "まじめ");
+    const item = state.tools.some((tool) => tool["名前"] === raw.item) ? raw.item : "";
+    const id = String(raw.id || `${name}-${Date.now()}-${index}`).slice(0, 80);
+    return {
+      id,
+      name,
+      nickname: String(raw.nickname || "").slice(0, 40),
+      nature,
+      item,
+      ability,
+      ev,
+      moves,
+      moveHits: (Array.isArray(raw.moveHits) ? raw.moveHits : ["", "", "", ""]).slice(0, 4),
+      note: String(raw.note || "").slice(0, 300),
+      updatedAt: number(raw.updatedAt, Date.now()),
+    };
+  }
+
+  function normalizeEvPoints(ev) {
+    const next = defaultEv();
+    let remaining = POINT_TOTAL;
+    STAT_KEYS.forEach((stat) => {
+      const value = clamp(Math.round(number(ev?.[stat.key], 0)), 0, Math.min(POINT_MAX, remaining));
+      next[stat.key] = value;
+      remaining -= value;
+    });
+    return next;
+  }
+
+  function savedBuildKey(build) {
+    return [build.id || "", build.name, build.nature, build.item, build.ability, formatEv(build.ev), ...(build.moves || [])].map((value) => moveKey(value)).join("|");
+  }
+
+  function teamDamageConfig(build) {
+    return {
+      attackerName: build.name,
+      attackerNature: build.nature,
+      attackerItem: build.item,
+      attackerAbility: build.ability || defaultAbility(build.name),
+      attackerEv: cloneEv(build.ev),
+      attackerRank: defaultRank(),
+      defenderName: state.calc.defenderName,
+      defenderNature: state.calc.defenderNature,
+      defenderItem: state.calc.defenderItem,
+      defenderAbility: state.calc.defenderAbility,
+      defenderEv: cloneEv(state.calc.defenderEv),
+      defenderRank: cloneRank(state.calc.defenderRank),
+      moves: (build.moves || []).slice(0, 4),
+      moveHits: (build.moveHits || ["", "", "", ""]).slice(0, 4),
+      weather: state.calc.weather,
+      field: state.calc.field,
+      reflect: state.calc.reflect,
+      attackerStatus: "なし",
+      defenderStatus: state.calc.defenderStatus,
+      attackerHpCondition: "通常",
+      defenderHpCondition: state.calc.defenderHpCondition,
+      allyFainted: state.calc.allyFainted,
+      criticalHit: state.calc.criticalHit,
+      attackerMovedLast: state.calc.attackerMovedLast,
+      targetSwitched: state.calc.targetSwitched,
+      flashFireBoost: state.calc.flashFireBoost,
+      chargedBoost: state.calc.chargedBoost,
+      plusMinusActive: state.calc.plusMinusActive,
+      unburdenActive: state.calc.unburdenActive,
+      slowStartActive: state.calc.slowStartActive,
+      eelBoostActive: state.calc.eelBoostActive,
+      rivalry: state.calc.rivalry,
+      metronomeCount: state.calc.metronomeCount,
+      defenderHazards: cloneHazards(state.calc.defenderHazards),
+    };
+  }
+
+  function bestSingleDamage(results) {
+    return results.filter((result) => result?.ok).sort((a, b) => (b.maxPct || 0) - (a.maxPct || 0) || (b.minPct || 0) - (a.minPct || 0))[0] || null;
+  }
+
+  function calcBestTwoMoveDamage(results) {
+    const valid = results.filter((result) => result?.ok && result.hp);
+    if (valid.length < 2) return { ok: false, label: "—", note: "2つ以上の攻撃技があると表示します" };
+    let best = null;
+    for (let i = 0; i < valid.length; i += 1) {
+      for (let j = i + 1; j < valid.length; j += 1) {
+        const a = valid[i];
+        const b = valid[j];
+        const hp = a.hp;
+        const entry = Math.max(a.entryDamage || 0, b.entryDamage || 0);
+        const min = Math.min(hp, entry + a.moveMin + b.moveMin);
+        const max = Math.min(hp, entry + a.moveMax + b.moveMax);
+        const minPct = (min / hp) * 100;
+        const maxPct = (max / hp) * 100;
+        const score = maxPct * 1000 + minPct;
+        if (!best || score > best.score) {
+          const koText = min >= hp ? "確定" : max >= hp ? "乱数" : "不可";
+          best = {
+            ok: true,
+            score,
+            label: `${minPct.toFixed(1)} ~ ${maxPct.toFixed(1)}% / ${koText}`,
+            note: `${a.move?.name || "技1"} + ${b.move?.name || "技2"}${entry > 0 ? ` / 設置${entry}込み` : ""}`,
+          };
+        }
+      }
+    }
+    return best || { ok: false, label: "—", note: "2つ以上の攻撃技があると表示します" };
   }
 
   async function installApp() {

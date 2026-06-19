@@ -45,7 +45,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -345,6 +346,9 @@ button {
 
 .field input,
 .field select,
+.field textarea,
+.team-code-field textarea,
+.team-note-field textarea,
 .move-select,
 .plain-select {
   width: 100%;
@@ -358,6 +362,9 @@ button {
 
 .field input:focus,
 .field select:focus,
+.field textarea:focus,
+.team-code-field textarea:focus,
+.team-note-field textarea:focus,
 .move-select:focus,
 .filter-strip select:focus,
 .plain-select:focus,
@@ -674,6 +681,141 @@ button {
   background: var(--surface-soft);
   font-size: 12px;
   font-weight: 800;
+}
+
+.team-card-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.team-card-actions .ghost-button.small {
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.team-note-field,
+.team-code-field {
+  display: grid;
+  gap: 6px;
+}
+
+.team-note-field span,
+.team-code-field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.team-code-field textarea,
+.team-note-field textarea {
+  min-height: auto;
+  padding: 10px 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.team-code-field textarea {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.transfer-body {
+  display: grid;
+  gap: 12px;
+}
+
+.transfer-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.import-mode-field {
+  max-width: 240px;
+}
+
+.team-damage-list {
+  display: grid;
+  gap: 10px;
+}
+
+.team-damage-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.team-damage-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.team-damage-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.team-damage-head p,
+.team-damage-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.team-damage-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.team-damage-summary div {
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.team-damage-summary strong {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.team-damage-summary span {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.team-damage-moves {
+  display: grid;
+  gap: 6px;
+}
+
+.team-damage-move {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.team-damage-move span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-damage-move strong {
+  color: var(--ink);
 }
 
 .bottom-bar {
@@ -1035,6 +1177,15 @@ button {
   }
 
   .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .team-card-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .transfer-actions,
+  .team-damage-summary {
     grid-template-columns: 1fr;
   }
 
