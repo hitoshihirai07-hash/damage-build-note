@@ -11,8 +11,10 @@
     core: null,
     savedBuilds: [],
     pokemonNames: [],
+    seasonKeys: [],
     record: null,
     records: [],
+    picker: null,
   };
 
   init();
@@ -23,6 +25,7 @@
       if (!state.core) throw new Error("対戦記録の準備を始められませんでした。");
       await state.core.ready;
       state.savedBuilds = state.core.getSavedBuilds();
+      state.seasonKeys = state.core.getSeasonKeys();
       state.pokemonNames = state.core.getPokemonNames();
       state.records = loadRecords();
       state.record = createEmptyRecord();
@@ -47,6 +50,7 @@
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       outcome: "未確定",
+      season: defaultSeason(),
       mySelection: [null, null, null],
       opponentParty: ["", "", "", "", "", ""],
       opponentLead: "",
@@ -70,6 +74,7 @@
       createdAt: safeIso(value.createdAt),
       updatedAt: safeIso(value.updatedAt || value.createdAt),
       outcome: OUTCOMES.includes(value.outcome) ? value.outcome : "未確定",
+      season: normalizeSeason(value.season),
       mySelection: [0, 1, 2].map((index) => cloneBuild(selection[index])),
       opponentParty: [0, 1, 2, 3, 4, 5].map((index) => normalizeName(party[index])),
       opponentLead: normalizeName(value.opponentLead),
@@ -96,6 +101,15 @@
     return String(value || "").trim().slice(0, 60);
   }
 
+  function defaultSeason() {
+    return state.seasonKeys[state.seasonKeys.length - 1] || "";
+  }
+
+  function normalizeSeason(value) {
+    const season = String(value || "").trim().toUpperCase();
+    return state.seasonKeys.includes(season) ? season : defaultSeason();
+  }
+
   function render() {
     const stats = buildStats(state.records);
     app.innerHTML = `
@@ -118,7 +132,7 @@
         ${renderStatsPanel(stats)}
         ${renderHistoryPanel()}
       </main>
-      ${renderPokemonDatalist()}
+      ${renderPokemonPicker()}
     `;
   }
 
@@ -139,8 +153,8 @@
           <span class="panel-meta">自分の選出順</span>
         </div>
         <div class="panel-body">
-          <div class="field-grid review-two-column">
-            <label class="field">
+          <div class="field-grid review-two-column record-basic-fields">
+            <label class="field record-title-field">
               <span>タイトル</span>
               <input type="text" maxlength="80" data-record-field="title" value="${escapeAttr(state.record.title)}" placeholder="例：○○入りとの対戦" />
             </label>
@@ -148,6 +162,7 @@
               <span>結果</span>
               <select data-record-field="outcome">${OUTCOMES.map((value) => option(value, state.record.outcome)).join("")}</select>
             </label>
+            ${renderSeasonField()}
           </div>
           ${state.savedBuilds.length ? `
             <div class="review-selection-grid">
@@ -161,6 +176,21 @@
           `}
         </div>
       </section>
+    `;
+  }
+
+  function renderSeasonField() {
+    if (!state.seasonKeys.length) return "";
+    return `
+      <div class="field record-season-field">
+        <span>シーズン</span>
+        <div class="record-season-chips" role="group" aria-label="記録するシーズン">
+          ${state.seasonKeys.map((season) => `
+            <button class="record-season-chip ${season === state.record.season ? "is-selected" : ""}" type="button" data-record-action="set-season" data-season="${escapeAttr(season)}" aria-pressed="${season === state.record.season ? "true" : "false"}">${escapeHtml(season)}</button>
+          `).join("")}
+        </div>
+        <small>相手ポケモンの候補は、このシーズンで選べるポケモンに絞られます。</small>
+      </div>
     `;
   }
 
@@ -194,27 +224,22 @@
           <div class="review-opponent-section">
             <div class="review-section-heading">
               <h3>相手の手持ち 6体</h3>
-              <p>集計の母数になります。わかる範囲で入力してください。</p>
+              <p>タップして検索・選択します。${state.record.season ? `${escapeHtml(state.record.season)}の候補を表示中です。` : ""}</p>
             </div>
             <div class="record-party-grid">
-              ${party.map((name, index) => `
-                <label class="field record-party-slot">
-                  <span>${index + 1}</span>
-                  <input list="record-pokemon-options" data-record-field="opponent-party" data-index="${index}" value="${escapeAttr(name)}" autocomplete="off" placeholder="ポケモン名" />
-                </label>
-              `).join("")}
+              ${party.map((name, index) => renderOpponentPickerTrigger("opponent-party", index, name, `${index + 1}体目`)).join("")}
             </div>
           </div>
           <div class="review-opponent-section record-opponent-choice">
             <div class="review-section-heading">
               <h3>相手の初手・選出</h3>
-              <p>相手の選出率は、選出3体すべてが分かった対戦だけで集計します。</p>
+              <p>手持ち6体を入力すると、ここではその6体からタップして選べます。</p>
             </div>
-            <div class="field-grid review-two-column">
-              <label class="field">
+            <div class="field-grid review-two-column record-opponent-choice-head">
+              <div class="field record-picker-field">
                 <span>相手の初手</span>
-                <input list="record-pokemon-options" data-record-field="opponent-lead" value="${escapeAttr(state.record.opponentLead)}" autocomplete="off" placeholder="相手の初手" />
-              </label>
+                ${renderOpponentPickerTrigger("opponent-lead", null, state.record.opponentLead, "相手の初手")}
+              </div>
               <div class="record-selection-complete-note">
                 <strong>${opponentSelectionComplete(state.record) ? "選出3体：記録済み" : "選出3体：未確定"}</strong>
                 <span>未確定の対戦は初手率だけに反映されます。</span>
@@ -222,15 +247,28 @@
             </div>
             <div class="review-selection-grid record-opponent-selection-grid">
               ${state.record.opponentSelection.map((name, index) => `
-                <label class="review-selection-slot">
+                <div class="review-selection-slot record-picker-slot">
                   <span>相手 ${index + 1}体目</span>
-                  <input list="record-pokemon-options" data-record-field="opponent-selection" data-index="${index}" value="${escapeAttr(name)}" autocomplete="off" placeholder="選出ポケモン" />
-                </label>
+                  ${renderOpponentPickerTrigger("opponent-selection", index, name, `相手 ${index + 1}体目`)}
+                </div>
               `).join("")}
             </div>
           </div>
         </div>
       </section>
+    `;
+  }
+
+  function renderOpponentPickerTrigger(field, index, value, label) {
+    const isParty = field === "opponent-party";
+    const hasValue = Boolean(value);
+    const indexAttr = Number.isInteger(index) ? ` data-index="${index}"` : "";
+    return `
+      <button class="record-pokemon-picker-trigger ${isParty ? "record-party-picker-slot" : ""} ${hasValue ? "has-value" : ""}" type="button" data-record-action="open-pokemon-picker" data-picker-field="${field}"${indexAttr} aria-label="${escapeAttr(`${label}を選ぶ`)}">
+        ${isParty ? `<span class="record-party-number">${index + 1}</span>` : ""}
+        <span>${hasValue ? escapeHtml(value) : "ポケモンを選ぶ"}</span>
+        <small>${hasValue ? "変更" : "タップして選択"}</small>
+      </button>
     `;
   }
 
@@ -341,7 +379,7 @@
       <article class="review-history-card">
         <div>
           <h3>${escapeHtml(record.title)}</h3>
-          <p>${escapeHtml(formatDateTime(new Date(record.updatedAt)))} / ${escapeHtml(record.outcome)}</p>
+          <p>${escapeHtml(formatDateTime(new Date(record.updatedAt)))} / ${escapeHtml(record.season || "シーズン未設定")} / ${escapeHtml(record.outcome)}</p>
           <p><b>自分：</b>${escapeHtml(mySelection)}</p>
           <p><b>相手：</b>${escapeHtml(opponentParty)}</p>
           <p>${escapeHtml(opponentInfo)}</p>
@@ -354,8 +392,87 @@
     `;
   }
 
-  function renderPokemonDatalist() {
-    return `<datalist id="record-pokemon-options">${state.pokemonNames.map((name) => `<option value="${escapeAttr(name)}"></option>`).join("")}</datalist>`;
+  function renderPokemonPicker() {
+    if (!state.picker) return "";
+    const picker = state.picker;
+    const candidates = getPickerCandidates(picker);
+    const selected = picker.field === "opponent-party"
+      ? state.record.opponentParty[picker.index] || ""
+      : picker.field === "opponent-lead"
+        ? state.record.opponentLead
+        : state.record.opponentSelection[picker.index] || "";
+    const candidateButtons = candidates.length
+      ? candidates.map((name) => {
+        const unavailable = isPickerCandidateUnavailable(name, picker, selected);
+        const isSelected = name === selected;
+        return `
+          <button class="record-pokemon-option ${isSelected ? "is-selected" : ""}" type="button" data-record-action="choose-pokemon" data-name="${escapeAttr(name)}" ${unavailable ? "disabled" : ""}>
+            <span>${escapeHtml(name)}</span>
+            <small>${isSelected ? "選択中" : unavailable ? "入力済み" : "選ぶ"}</small>
+          </button>
+        `;
+      }).join("")
+      : `<p class="record-picker-empty">該当するポケモンがありません。</p>`;
+    return `
+      <div class="record-picker-backdrop" data-record-action="close-pokemon-picker" aria-hidden="true"></div>
+      <section class="record-pokemon-picker" role="dialog" aria-modal="true" aria-labelledby="record-picker-title">
+        <div class="record-picker-handle" aria-hidden="true"></div>
+        <div class="record-picker-head">
+          <div>
+            <p>${escapeHtml(pickerContextLabel(picker))}</p>
+            <h2 id="record-picker-title">ポケモンを選ぶ</h2>
+          </div>
+          <button class="ghost-button small" type="button" data-record-action="close-pokemon-picker">閉じる</button>
+        </div>
+        <label class="record-picker-search">
+          <span>ポケモン名を検索</span>
+          <input type="search" data-record-picker-search value="${escapeAttr(picker.query || "")}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例：ピカチュウ" />
+        </label>
+        <div class="record-picker-status">
+          <span>${escapeHtml(pickerCandidateDescription(picker))}</span>
+          <span>${candidates.length}件</span>
+        </div>
+        <div class="record-pokemon-options">${candidateButtons}</div>
+        ${selected ? `<button class="record-picker-clear" type="button" data-record-action="clear-picked-pokemon">この枠を空にする</button>` : ""}
+      </section>
+    `;
+  }
+
+  function pickerContextLabel(picker) {
+    if (picker.field === "opponent-party") return `相手の手持ち ${Number(picker.index) + 1}体目`;
+    if (picker.field === "opponent-lead") return "相手の初手";
+    return `相手の選出 ${Number(picker.index) + 1}体目`;
+  }
+
+  function pickerCandidateDescription(picker) {
+    if (picker.field === "opponent-party") return state.record.season ? `${state.record.season}で選べるポケモン` : "ポケモン一覧";
+    const count = uniqueNames(state.record.opponentParty).length;
+    return count ? "入力済みの相手の手持ち6体から選択" : "先に相手の手持ちを入力してください";
+  }
+
+  function getPickerCandidates(picker) {
+    const query = normalizeSearch(picker.query);
+    const source = picker.field === "opponent-party"
+      ? (state.core.getPokemonNames(state.record.season || undefined) || [])
+      : uniqueNames(state.record.opponentParty);
+    return source
+      .filter((name) => normalizeSearch(name).includes(query))
+      .slice(0, 160);
+  }
+
+  function normalizeSearch(value) {
+    return String(value || "").trim().toLocaleLowerCase("ja");
+  }
+
+  function isPickerCandidateUnavailable(name, picker, selected) {
+    if (name === selected) return false;
+    if (picker.field === "opponent-party") {
+      return state.record.opponentParty.some((entry, index) => index !== picker.index && entry === name);
+    }
+    if (picker.field === "opponent-selection") {
+      return state.record.opponentSelection.some((entry, index) => index !== picker.index && entry === name);
+    }
+    return false;
   }
 
   function buildStats(records) {
@@ -481,6 +598,7 @@
   }
 
   function saveRecord() {
+    state.record.season = normalizeSeason(state.record.season);
     const error = validateRecord(state.record);
     if (error) {
       showToast(error);
@@ -543,9 +661,60 @@
       state.record.mySelection[index] = cloneBuild(build);
       render();
     }
-    if (field === "opponent-party" && Number.isInteger(index)) state.record.opponentParty[index] = normalizeName(target.value);
-    if (field === "opponent-lead") state.record.opponentLead = normalizeName(target.value);
-    if (field === "opponent-selection" && Number.isInteger(index)) state.record.opponentSelection[index] = normalizeName(target.value);
+  }
+
+  function openPokemonPicker(field, index) {
+    state.picker = { field, index: Number.isInteger(index) ? index : null, query: "" };
+    render();
+    window.setTimeout(() => document.querySelector("[data-record-picker-search]")?.focus(), 0);
+  }
+
+  function closePokemonPicker() {
+    if (!state.picker) return;
+    state.picker = null;
+    render();
+  }
+
+  function choosePokemon(name) {
+    const picker = state.picker;
+    if (!picker) return;
+    const picked = normalizeName(name);
+    if (isPickerCandidateUnavailable(picked, picker, "")) return;
+    if (picker.field === "opponent-party" && Number.isInteger(picker.index)) {
+      const previous = state.record.opponentParty[picker.index];
+      state.record.opponentParty[picker.index] = picked;
+      if (previous && previous !== picked) {
+        if (state.record.opponentLead === previous) state.record.opponentLead = "";
+        state.record.opponentSelection = state.record.opponentSelection.map((value) => value === previous ? "" : value);
+      }
+    }
+    if (picker.field === "opponent-lead") state.record.opponentLead = picked;
+    if (picker.field === "opponent-selection" && Number.isInteger(picker.index)) state.record.opponentSelection[picker.index] = picked;
+    state.picker = null;
+    render();
+  }
+
+  function clearPickedPokemon() {
+    const picker = state.picker;
+    if (!picker) return;
+    if (picker.field === "opponent-party" && Number.isInteger(picker.index)) {
+      const previous = state.record.opponentParty[picker.index];
+      state.record.opponentParty[picker.index] = "";
+      if (state.record.opponentLead === previous) state.record.opponentLead = "";
+      state.record.opponentSelection = state.record.opponentSelection.map((value) => value === previous ? "" : value);
+    }
+    if (picker.field === "opponent-lead") state.record.opponentLead = "";
+    if (picker.field === "opponent-selection" && Number.isInteger(picker.index)) state.record.opponentSelection[picker.index] = "";
+    state.picker = null;
+    render();
+  }
+
+  function setSeason(season) {
+    const nextSeason = normalizeSeason(season);
+    if (!nextSeason || nextSeason === state.record.season) return;
+    state.record.season = nextSeason;
+    render();
+    showToast(`${nextSeason}に切り替えました`);
   }
 
   document.addEventListener("click", (event) => {
@@ -554,6 +723,7 @@
     const action = target.dataset.recordAction;
     if (action === "new") {
       state.record = createEmptyRecord();
+      state.picker = null;
       render();
       showToast("新しい対戦記録を開きました");
       return;
@@ -561,10 +731,28 @@
     if (action === "save") saveRecord();
     if (action === "load") loadRecord(target.dataset.id || "");
     if (action === "delete") deleteRecord(target.dataset.id || "");
+    if (action === "set-season") setSeason(target.dataset.season || "");
+    if (action === "open-pokemon-picker") openPokemonPicker(target.dataset.pickerField || "", Number(target.dataset.index));
+    if (action === "close-pokemon-picker") closePokemonPicker();
+    if (action === "choose-pokemon") choosePokemon(target.dataset.name || "");
+    if (action === "clear-picked-pokemon") clearPickedPokemon();
   });
 
   document.addEventListener("input", (event) => {
     const target = event.target;
+    if (target?.dataset?.recordPickerSearch && state.picker) {
+      state.picker.query = String(target.value || "").slice(0, 60);
+      const selectionStart = target.selectionStart;
+      render();
+      window.setTimeout(() => {
+        const input = document.querySelector("[data-record-picker-search]");
+        if (input) {
+          input.focus();
+          input.setSelectionRange(selectionStart, selectionStart);
+        }
+      }, 0);
+      return;
+    }
     if (!target?.dataset?.recordField) return;
     setField(target);
   });
@@ -573,7 +761,10 @@
     const target = event.target;
     if (!target?.dataset?.recordField) return;
     setField(target);
-    if (["opponent-party", "opponent-lead", "opponent-selection"].includes(target.dataset.recordField)) render();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.picker) closePokemonPicker();
   });
 
   function showToast(message) {

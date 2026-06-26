@@ -219,7 +219,12 @@
     return {
       ready,
       getSavedBuilds: () => state.saved.map((build) => cloneReviewBuild(build)),
-      getPokemonNames: () => state.pokemon.map((pokemon) => pokemon.name).filter(Boolean).sort((a, b) => a.localeCompare(b, "ja")),
+      getSeasonKeys: () => state.seasonKeys.slice(),
+      getPokemonNames: (season = SEASON_ALL) => state.pokemon
+        .filter((pokemon) => season === SEASON_ALL || pokemon.seasons[season] === true)
+        .map((pokemon) => pokemon.name)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "ja")),
       getMoveOptions: (name) => getMoves(name).map((move) => ({ name: move.name, type: move.type, category: move.category, power: move.power, accuracy: move.accuracy })),
       getRankingEstimate: (name) => rankingEstimateForReview(name),
       getRankingUpdatedAt: () => state.ranking?.updatedAt || "",

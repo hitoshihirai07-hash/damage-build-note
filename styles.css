@@ -2267,3 +2267,322 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* 対戦記録：スマホ向けポケモン選択 */
+.record-basic-fields {
+  align-items: start;
+}
+
+.record-title-field {
+  grid-column: 1 / -1;
+}
+
+.record-season-field {
+  display: grid;
+  gap: 7px;
+}
+
+.record-season-field > small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.record-season-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.record-season-chip {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.record-season-chip.is-selected {
+  border-color: var(--blue);
+  color: #fff;
+  background: var(--blue);
+}
+
+.record-pokemon-picker-trigger {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 64px;
+  gap: 3px;
+  align-content: center;
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.record-pokemon-picker-trigger > span:not(.record-party-number) {
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-pokemon-picker-trigger > small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.record-pokemon-picker-trigger.has-value {
+  color: var(--ink);
+  background: #fff;
+}
+
+.record-pokemon-picker-trigger:focus-visible,
+.record-season-chip:focus-visible,
+.record-pokemon-option:focus-visible,
+.record-picker-clear:focus-visible {
+  outline: 3px solid rgba(17, 103, 232, 0.28);
+  outline-offset: 2px;
+}
+
+.record-party-grid .record-pokemon-picker-trigger {
+  min-height: 58px;
+  padding-left: 36px;
+}
+
+.record-party-number {
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  color: #fff;
+  background: var(--amber);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.record-picker-field {
+  display: grid;
+  gap: 6px;
+}
+
+.record-picker-field > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.record-opponent-choice-head {
+  align-items: stretch;
+}
+
+.record-opponent-selection-grid .record-pokemon-picker-trigger {
+  width: 100%;
+}
+
+.record-picker-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  background: rgba(20, 33, 61, 0.44);
+}
+
+.record-pokemon-picker {
+  position: fixed;
+  z-index: 51;
+  right: 50%;
+  bottom: 0;
+  display: grid;
+  width: min(680px, 100%);
+  max-height: min(82dvh, 760px);
+  gap: 12px;
+  padding: 10px 16px max(16px, env(safe-area-inset-bottom));
+  overflow: hidden;
+  transform: translateX(50%);
+  border: 1px solid var(--line-strong);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: #fff;
+  box-shadow: 0 -14px 42px rgba(27, 39, 72, 0.2);
+}
+
+.record-picker-handle {
+  justify-self: center;
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.record-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.record-picker-head h2,
+.record-picker-head p {
+  margin: 0;
+}
+
+.record-picker-head h2 {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.record-picker-head p {
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.record-picker-search {
+  display: grid;
+  gap: 5px;
+}
+
+.record-picker-search > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.record-picker-search input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-weight: 700;
+}
+
+.record-picker-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.record-pokemon-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+  padding: 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.record-pokemon-option {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.record-pokemon-option > span {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-pokemon-option > small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.record-pokemon-option.is-selected {
+  border-color: var(--blue);
+  background: #edf5ff;
+}
+
+.record-pokemon-option.is-selected > small {
+  color: var(--blue-dark);
+}
+
+.record-pokemon-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.record-picker-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 22px 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.record-picker-clear {
+  justify-self: start;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  color: #a21c1c;
+  background: #fff0f0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 520px) {
+  .record-title-field {
+    grid-column: auto;
+  }
+
+  .record-party-grid .record-pokemon-picker-trigger {
+    min-height: 64px;
+  }
+
+  .record-pokemon-picker {
+    max-height: 88dvh;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .record-pokemon-options {
+    grid-template-columns: 1fr;
+  }
+}
