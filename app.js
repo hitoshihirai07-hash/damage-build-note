@@ -11,6 +11,7 @@
   const EXPORT_CODE_PREFIX = "DBN1:";
   const APP_NAME = "Damage Build Note";
   const SEASON_ALL = "all";
+  const IS_BATTLE_REVIEW_PAGE = document.documentElement?.dataset?.page === "battle-review";
 
   const STAT_KEYS = [
     { key: "hp", label: "HP", csv: "HP" },
@@ -138,67 +139,181 @@
   const toast = document.getElementById("toast");
   let deferredInstallPrompt = null;
 
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    deferredInstallPrompt = event;
-  });
-
-  window.addEventListener("appinstalled", () => {
-    deferredInstallPrompt = null;
-    showToast("ホーム画面に追加しました");
-  });
-
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(() => {
-        showToast("オフライン保存の準備に失敗しました");
-      });
+  if (!IS_BATTLE_REVIEW_PAGE) {
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
     });
-  }
 
-  init();
+    window.addEventListener("appinstalled", () => {
+      deferredInstallPrompt = null;
+      showToast("ホーム画面に追加しました");
+    });
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {
+          showToast("オフライン保存の準備に失敗しました");
+        });
+      });
+    }
+
+    init();
+  } else {
+    window.DamageBuildNoteCore = createBattleReviewCore();
+  }
 
   async function init() {
     try {
-      const [pokemonCsv, moveCsv, toolCsv, characteristicsCsv, megaCsv, rankingJson] = await Promise.all([
-        fetchText(`${DATA_DIR}/pokemon.csv`),
-        fetchText(`${DATA_DIR}/pokemon_moves.csv`),
-        fetchText(`${DATA_DIR}/tool.csv`),
-        fetchText(`${DATA_DIR}/characteristics.csv`),
-        fetchText(`${DATA_DIR}/mega.csv`),
-        Promise.all([
-          fetchJson(`${DATA_DIR}/season_ranking.json`).catch(() => null),
-          fetchJson(`${DATA_DIR}/season_ranking_single_s3.json`).catch(() => null),
-          fetchJson(`${DATA_DIR}/season_ranking_single_s2.json`).catch(() => null),
-        ]),
-      ]);
-
-      const pokemonRows = parseCsv(pokemonCsv);
-      state.seasonKeys = extractSeasonKeys(pokemonRows);
-      state.seasonFilter = state.seasonKeys[state.seasonKeys.length - 1] || SEASON_ALL;
-      state.pokemon = pokemonRows.map(normalizePokemon).filter((row) => row.name);
-      state.moves = parseCsv(moveCsv).map(normalizeMove).filter((row) => row.pokemon && row.name);
-      state.tools = parseCsv(toolCsv).filter((row) => row["名前"]);
-      state.characteristics = parseCsv(characteristicsCsv).filter((row) => row["特性"]);
-      state.mega = parseCsv(megaCsv).map(normalizeMega).filter((row) => row.baseName && row.megaName);
-      state.ranking = selectLatestRanking(rankingJson);
-
-      state.characteristics.forEach((ability) => state.abilityByName.set(ability["特性"], ability));
-      state.pokemon.forEach((pokemon) => state.pokemonByName.set(pokemon.name, pokemon));
-      state.moves.forEach((move) => {
-        if (!state.moveByName.has(move.name)) state.moveByName.set(move.name, move);
-        const key = moveKey(move.name);
-        if (!state.moveByKey.has(key)) state.moveByKey.set(key, move);
-      });
-      groupMega();
-      groupMoves();
-      groupRanking();
-      restoreSaved();
+      await loadCoreData();
       createInitialState();
       render();
     } catch (error) {
       app.innerHTML = `<main class="view"><section class="panel"><div class="panel-header"><h2>読み込みエラー</h2></div><div class="panel-body"><p class="empty-state">${escapeHtml(error.message)}</p></div></section></main>`;
     }
+  }
+
+  async function loadCoreData() {
+    const [pokemonCsv, moveCsv, toolCsv, characteristicsCsv, megaCsv, rankingJson] = await Promise.all([
+      fetchText(`${DATA_DIR}/pokemon.csv`),
+      fetchText(`${DATA_DIR}/pokemon_moves.csv`),
+      fetchText(`${DATA_DIR}/tool.csv`),
+      fetchText(`${DATA_DIR}/characteristics.csv`),
+      fetchText(`${DATA_DIR}/mega.csv`),
+      Promise.all([
+        fetchJson(`${DATA_DIR}/season_ranking.json`).catch(() => null),
+        fetchJson(`${DATA_DIR}/season_ranking_single_s3.json`).catch(() => null),
+        fetchJson(`${DATA_DIR}/season_ranking_single_s2.json`).catch(() => null),
+      ]),
+    ]);
+
+    const pokemonRows = parseCsv(pokemonCsv);
+    state.seasonKeys = extractSeasonKeys(pokemonRows);
+    state.seasonFilter = state.seasonKeys[state.seasonKeys.length - 1] || SEASON_ALL;
+    state.pokemon = pokemonRows.map(normalizePokemon).filter((row) => row.name);
+    state.moves = parseCsv(moveCsv).map(normalizeMove).filter((row) => row.pokemon && row.name);
+    state.tools = parseCsv(toolCsv).filter((row) => row["名前"]);
+    state.characteristics = parseCsv(characteristicsCsv).filter((row) => row["特性"]);
+    state.mega = parseCsv(megaCsv).map(normalizeMega).filter((row) => row.baseName && row.megaName);
+    state.ranking = selectLatestRanking(rankingJson);
+
+    state.pokemonByName.clear();
+    state.moveByName.clear();
+    state.moveByKey.clear();
+    state.abilityByName.clear();
+    state.characteristics.forEach((ability) => state.abilityByName.set(ability["特性"], ability));
+    state.pokemon.forEach((pokemon) => state.pokemonByName.set(pokemon.name, pokemon));
+    state.moves.forEach((move) => {
+      if (!state.moveByName.has(move.name)) state.moveByName.set(move.name, move);
+      const key = moveKey(move.name);
+      if (!state.moveByKey.has(key)) state.moveByKey.set(key, move);
+    });
+    groupMega();
+    groupMoves();
+    groupRanking();
+    restoreSaved();
+  }
+
+  function createBattleReviewCore() {
+    const ready = loadCoreData();
+    return {
+      ready,
+      getSavedBuilds: () => state.saved.map((build) => cloneReviewBuild(build)),
+      getPokemonNames: () => state.pokemon.map((pokemon) => pokemon.name).filter(Boolean).sort((a, b) => a.localeCompare(b, "ja")),
+      getMoveOptions: (name) => getMoves(name).map((move) => ({ name: move.name, type: move.type, category: move.category, power: move.power, accuracy: move.accuracy })),
+      getRankingEstimate: (name) => rankingEstimateForReview(name),
+      getRankingUpdatedAt: () => state.ranking?.updatedAt || "",
+      calculateMove: (input) => calculateReviewMove(input),
+    };
+  }
+
+  function cloneReviewBuild(build) {
+    return {
+      id: String(build.id || ""),
+      name: String(build.name || ""),
+      nickname: String(build.nickname || ""),
+      nature: String(build.nature || "まじめ"),
+      item: String(build.item || ""),
+      ability: String(build.ability || defaultAbility(build.name)),
+      ev: cloneEv(build.ev),
+      moves: (build.moves || []).slice(0, 4),
+      note: String(build.note || ""),
+      updatedAt: number(build.updatedAt, Date.now()),
+    };
+  }
+
+  function rankingEstimateForReview(name) {
+    const rank = getRankingForPokemon(name);
+    const parsedNature = parseRankNature(rank) || "まじめ";
+    const parsedEv = parseRankSpread(rank) || defaultEv();
+    const moveUsage = (rank?.moves || []).slice(0, 10);
+    const itemUsage = (rank?.items || []).slice(0, 5);
+    const abilityUsage = (rank?.abilities || []).slice(0, 5);
+    return {
+      found: Boolean(rank),
+      rank: number(rank?.rank, 0) || null,
+      updatedAt: rank?.updatedAt || state.ranking?.updatedAt || "",
+      nature: parsedNature,
+      ev: cloneEv(parsedEv),
+      item: stripUsageText(itemUsage[0] || ""),
+      ability: stripUsageText(abilityUsage[0] || "") || defaultAbility(name),
+      moves: getRankedMoveNames(rank).slice(0, 4),
+      moveUsage,
+      itemUsage,
+      abilityUsage,
+      natureUsage: (rank?.natures || []).slice(0, 5),
+      spreadUsage: (rank?.spreads || []).slice(0, 5),
+    };
+  }
+
+  function calculateReviewMove(input = {}) {
+    const attacker = input.attacker || {};
+    const defender = input.defender || {};
+    const moveName = String(input.move || "").trim();
+    if (!state.pokemonByName.has(attacker.name) || !state.pokemonByName.has(defender.name)) {
+      return { ok: false, reason: "攻撃側または防御側のポケモンを選んでください" };
+    }
+    if (!moveName) return { ok: false, reason: "技を選んでください" };
+    const move = findMoveInList(getMoves(attacker.name), moveName) || findAnyMove(moveName);
+    if (!move) return { ok: false, reason: "技データが見つかりません" };
+    const conditions = input.conditions || {};
+    const config = {
+      attackerName: attacker.name,
+      attackerNature: attacker.nature || "まじめ",
+      attackerItem: attacker.item || "",
+      attackerAbility: attacker.ability || defaultAbility(attacker.name),
+      attackerEv: cloneEv(attacker.ev || defaultEv()),
+      attackerRank: cloneRank(attacker.rank || defaultRank()),
+      defenderName: defender.name,
+      defenderNature: defender.nature || "まじめ",
+      defenderItem: defender.item || "",
+      defenderAbility: defender.ability || defaultAbility(defender.name),
+      defenderEv: cloneEv(defender.ev || defaultEv()),
+      defenderRank: cloneRank(defender.rank || defaultRank()),
+      moves: [move.name],
+      moveHits: [conditions.moveHits || "", "", "", ""],
+      weather: conditions.weather || "なし",
+      field: conditions.field || "なし",
+      reflect: conditions.reflect || "なし",
+      attackerStatus: conditions.attackerStatus || "なし",
+      defenderStatus: conditions.defenderStatus || "なし",
+      attackerHpCondition: conditions.attackerHpCondition || "通常",
+      defenderHpCondition: conditions.defenderHpCondition || "通常",
+      allyFainted: number(conditions.allyFainted, 0),
+      criticalHit: Boolean(conditions.criticalHit),
+      attackerMovedLast: Boolean(conditions.attackerMovedLast),
+      targetSwitched: Boolean(conditions.targetSwitched),
+      flashFireBoost: Boolean(conditions.flashFireBoost),
+      chargedBoost: Boolean(conditions.chargedBoost),
+      plusMinusActive: Boolean(conditions.plusMinusActive),
+      unburdenActive: Boolean(conditions.unburdenActive),
+      slowStartActive: Boolean(conditions.slowStartActive),
+      eelBoostActive: Boolean(conditions.eelBoostActive),
+      rivalry: conditions.rivalry || "なし",
+      metronomeCount: number(conditions.metronomeCount, 1),
+      defenderHazards: defaultHazards(),
+    };
+    return calcMoveDamage(config, move, 0);
   }
 
   async function fetchText(url) {
@@ -1004,9 +1119,25 @@
     return `
       <main class="view team-view">
         ${renderTeamSavePanel()}
+        ${renderBattleReviewPanel()}
         ${renderTeamTransferPanel()}
         ${renderTeamDamagePanel()}
       </main>
+    `;
+  }
+
+  function renderBattleReviewPanel() {
+    return `
+      <section class="panel battle-review-link-panel">
+        <div class="panel-header">
+          <h2>対戦動画振り返り</h2>
+          <span class="panel-meta">試作</span>
+        </div>
+        <div class="panel-body">
+          <p class="empty-state">3vs3シングルの録画を見ながら、選出・各ターン・推定ダメージを残します。動画や画像は履歴に保存しません。</p>
+          <button class="primary-button secondary" type="button" data-action="open-battle-review">対戦動画振り返りを開く</button>
+        </div>
+      </section>
     `;
   }
 
@@ -1535,6 +1666,7 @@
     `;
   }
 
+  if (!IS_BATTLE_REVIEW_PAGE) {
   document.addEventListener("click", (event) => {
     const target = event.target.closest("[data-tab], [data-action]");
     if (!target) return;
@@ -1585,6 +1717,10 @@
     if (action === "switch-pokemon") updatePokemon(target.dataset.mode, target.dataset.name);
     if (action === "apply-dex") applyDexPokemon(target.dataset.target, target.dataset.name);
     if (action === "install-app") installApp();
+    if (action === "open-battle-review") {
+      window.location.href = "battle-review.html";
+      return;
+    }
   });
 
   document.addEventListener("input", (event) => {
@@ -1683,6 +1819,7 @@
     }
     render();
   });
+  }
 
   function commitMoveSearch(target) {
     const mode = target.dataset.mode;

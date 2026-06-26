@@ -1,9 +1,11 @@
-const CACHE_NAME = "damage-build-note-v11";
+const CACHE_NAME = "damage-build-note-v12";
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./battle-review.html",
   "./styles.css",
   "./app.js",
+  "./battle-review.js",
   "./manifest.webmanifest",
   "./assets/icons/icon.svg",
   "./assets/icons/icon-192.png",
@@ -15,7 +17,8 @@ const APP_SHELL = [
   "./data/tool.csv",
   "./data/characteristics.csv",
   "./data/mega.csv",
-  "./data/season_ranking_single_s2.json"
+  "./data/season_ranking_single_s2.json",
+  "./data/season_ranking_single_s3.json"
 ];
 
 self.addEventListener("install", (event) => {

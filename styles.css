@@ -1475,3 +1475,591 @@ button {
     font-size: 12px;
   }
 }
+
+/* 対戦動画振り返り */
+.review-shell {
+  max-width: 1040px;
+}
+
+.review-topbar .header-actions {
+  align-items: center;
+}
+
+.review-topbar .text-button {
+  text-decoration: none;
+}
+
+.review-view {
+  padding-bottom: 24px;
+}
+
+.review-notice {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid #f1d58d;
+  border-radius: var(--radius);
+  color: #6b4e05;
+  background: #fff9e8;
+  box-shadow: 0 6px 18px rgba(150, 112, 20, 0.06);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.review-notice strong {
+  font-size: 14px;
+}
+
+.review-notice small {
+  color: #8c691b;
+  font-size: 12px;
+}
+
+.review-upload-field {
+  display: grid;
+  gap: 6px;
+}
+
+.review-upload-field > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-upload-field input[type="file"] {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 9px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.review-video {
+  display: block;
+  width: min(100%, 560px);
+  max-height: 68svh;
+  margin: 0 auto;
+  border-radius: var(--radius);
+  background: #111827;
+}
+
+.review-video-meta,
+.review-video-actions,
+.review-card-actions,
+.review-checks,
+.review-ranking-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.review-video-meta {
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-video-meta span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-helper {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.review-two-column,
+.review-turn-grid,
+.review-condition-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.review-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.review-selection-slot {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.review-selection-slot > span,
+.review-selection-slot small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-selection-slot strong {
+  min-height: 20px;
+  font-size: 14px;
+}
+
+.review-selection-slot select,
+.review-opponent-edit input,
+.review-opponent-edit select,
+.review-ev-grid input,
+.review-hp-block input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: var(--ink);
+  background: #fff;
+  font-weight: 700;
+}
+
+.review-empty-action {
+  display: grid;
+  gap: 10px;
+}
+
+.review-empty-action .primary-button {
+  text-decoration: none;
+}
+
+.review-opponent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.review-opponent-card {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.review-opponent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.review-opponent-head strong {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: #fff;
+  background: var(--amber);
+}
+
+.review-estimate-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.review-estimate-line span:first-child {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.review-estimate-line span:last-child {
+  overflow: hidden;
+  font-weight: 700;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-estimate-line.subtle {
+  padding-top: 7px;
+  border-top: 1px dashed var(--line);
+}
+
+.review-opponent-edit {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 9px;
+  border-radius: 7px;
+  background: var(--surface-soft);
+}
+
+.review-opponent-edit .field:last-child {
+  grid-column: 1 / -1;
+}
+
+.review-ev-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.review-ev-grid label {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.review-ev-grid input {
+  min-height: 34px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.review-turn-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.review-turn-list {
+  display: grid;
+  gap: 12px;
+}
+
+.review-turn-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.review-turn-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+}
+
+.review-turn-head > div {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.review-turn-head strong {
+  color: var(--blue-dark);
+  font-size: 16px;
+}
+
+.review-turn-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-action-columns,
+.review-hp-grid,
+.review-damage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.review-action-block,
+.review-hp-block,
+.review-damage-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-soft);
+}
+
+.review-action-block h3,
+.review-hp-block h3,
+.review-aggregate-block h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.review-action-block small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-hp-block > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.review-hp-block label {
+  display: grid;
+  gap: 4px;
+}
+
+.review-hp-block label span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.review-condition-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.review-checks {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-checks label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.review-checks input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blue);
+}
+
+.review-damage-card {
+  background: #f8fbff;
+}
+
+.review-damage-card > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.review-damage-card > strong {
+  color: var(--red);
+  font-size: 18px;
+}
+
+.review-damage-card > small {
+  min-height: 30px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.review-damage-card em {
+  color: var(--amber);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.review-damage-actual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.review-damage-actual b {
+  padding: 3px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.review-damage-actual .match {
+  color: #0b6c3b;
+  background: #eaf8ef;
+}
+
+.review-damage-actual .low {
+  color: #9a5c00;
+  background: #fff4da;
+}
+
+.review-damage-actual .high {
+  color: #a21c1c;
+  background: #fff0f0;
+}
+
+.review-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.review-summary-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-soft);
+  text-align: center;
+}
+
+.review-summary-grid span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.review-summary-grid strong {
+  font-size: 18px;
+}
+
+.review-aggregate-block {
+  display: grid;
+  gap: 8px;
+}
+
+.review-aggregate-list {
+  display: grid;
+  gap: 6px;
+}
+
+.review-aggregate-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.review-aggregate-list span {
+  color: var(--muted);
+  font-weight: 700;
+  text-align: right;
+}
+
+.review-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.review-history-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.review-history-card h3,
+.review-history-card p {
+  margin: 0;
+}
+
+.review-history-card h3 {
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.review-history-card p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .review-topbar {
+    align-items: flex-start;
+  }
+
+  .review-topbar .header-actions {
+    gap: 4px;
+  }
+
+  .review-topbar .text-button {
+    min-height: 36px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .review-selection-grid,
+  .review-opponent-grid,
+  .review-opponent-edit,
+  .review-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-selection-slot:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .review-opponent-edit .field:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .review-two-column,
+  .review-turn-grid,
+  .review-condition-grid,
+  .review-action-columns,
+  .review-hp-grid,
+  .review-damage-grid,
+  .review-opponent-grid,
+  .review-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-selection-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .review-selection-slot:last-child {
+    grid-column: auto;
+  }
+
+  .review-opponent-edit {
+    grid-template-columns: 1fr;
+  }
+
+  .review-opponent-edit .field:last-child {
+    grid-column: auto;
+  }
+
+  .review-history-card {
+    display: grid;
+  }
+
+  .review-history-card .review-card-actions {
+    justify-content: flex-end;
+  }
+}
