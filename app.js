@@ -609,6 +609,7 @@
         ${renderTab("calc", "ダメージ計算")}
         ${renderTab("dex", "図鑑")}
         ${renderTab("team", "チーム")}
+        ${renderBattleReviewTab()}
       </nav>
       ${renderSeasonFilter()}
       ${renderActiveView()}
@@ -618,6 +619,10 @@
 
   function renderTab(key, label) {
     return `<button class="tab-button" type="button" role="tab" data-tab="${key}" aria-selected="${state.activeView === key}">${label}</button>`;
+  }
+
+  function renderBattleReviewTab() {
+    return `<button class="tab-button battle-review-tab" type="button" data-action="open-battle-review" aria-label="対戦動画振り返りを開く">対戦振り返り</button>`;
   }
 
   function renderActiveView() {

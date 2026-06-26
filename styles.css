@@ -222,7 +222,7 @@ button {
   top: calc(54px + env(safe-area-inset-top));
   z-index: 18;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -1108,6 +1108,12 @@ button {
   .dex-form-header {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .tabs {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
