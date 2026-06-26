@@ -622,7 +622,7 @@
   }
 
   function renderBattleReviewTab() {
-    return `<button class="tab-button battle-review-tab" type="button" data-action="open-battle-review" aria-label="対戦動画振り返りを開く">対戦振り返り</button>`;
+    return `<button class="tab-button battle-review-tab" type="button" data-action="open-battle-review" aria-label="対戦記録を開く">対戦記録</button>`;
   }
 
   function renderActiveView() {
@@ -1135,12 +1135,12 @@
     return `
       <section class="panel battle-review-link-panel">
         <div class="panel-header">
-          <h2>対戦動画振り返り</h2>
-          <span class="panel-meta">試作</span>
+          <h2>対戦記録</h2>
+          <span class="panel-meta">3vs3シングル</span>
         </div>
         <div class="panel-body">
-          <p class="empty-state">3vs3シングルの録画を見ながら、選出・各ターン・推定ダメージを残します。動画や画像は履歴に保存しません。</p>
-          <button class="primary-button secondary" type="button" data-action="open-battle-review">対戦動画振り返りを開く</button>
+          <p class="empty-state">自分の選出3体、相手の手持ち6体・初手・選出、勝敗を簡単に残します。動画・画像・ターンごとの行動は扱いません。</p>
+          <button class="primary-button secondary" type="button" data-action="open-battle-review">対戦記録を開く</button>
         </div>
       </section>
     `;

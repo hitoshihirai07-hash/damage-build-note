@@ -1482,7 +1482,7 @@ button {
   }
 }
 
-/* 対戦動画振り返り */
+/* 対戦記録 */
 .review-shell {
   max-width: 1040px;
 }
@@ -2067,5 +2067,203 @@ button {
 
   .review-history-card .review-card-actions {
     justify-content: flex-end;
+  }
+}
+
+/* 簡単な対戦記録 */
+.review-opponent-record-body {
+  display: grid;
+  gap: 16px;
+}
+
+.review-opponent-section {
+  display: grid;
+  gap: 10px;
+}
+
+.review-section-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.review-section-heading h3,
+.record-table-heading h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.review-section-heading p,
+.record-stat-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.record-party-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.record-party-slot {
+  position: relative;
+}
+
+.record-party-slot > span {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 9px;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  color: #fff;
+  background: var(--amber);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.record-party-slot input {
+  padding-left: 36px;
+}
+
+.record-opponent-choice {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.record-selection-complete-note {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-height: var(--tap);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.record-selection-complete-note strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.record-selection-complete-note span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.record-opponent-selection-grid .review-selection-slot input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: var(--ink);
+  background: #fff;
+  font-weight: 700;
+}
+
+.review-stats-body {
+  display: grid;
+  gap: 14px;
+}
+
+.record-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.record-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.record-table-block {
+  min-width: 0;
+}
+
+.record-table-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.record-table-heading span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.record-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.record-table {
+  width: 100%;
+  min-width: 310px;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 12px;
+}
+
+.record-table th,
+.record-table td {
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.record-table thead th {
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.record-table th:first-child,
+.record-table tbody th {
+  max-width: 150px;
+  overflow: hidden;
+  color: var(--ink);
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.record-table tbody tr:last-child th,
+.record-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.record-empty-cell {
+  color: var(--muted);
+  text-align: center !important;
+}
+
+@media (max-width: 720px) {
+  .record-party-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .record-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .record-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
