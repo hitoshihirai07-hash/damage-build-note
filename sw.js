@@ -1,8 +1,9 @@
-const CACHE_NAME = "damage-build-note-v16";
+const CACHE_NAME = "damage-build-note-v17";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./battle-review.html",
+  "./simple-damage.html",
   "./styles.css",
   "./app.js",
   "./battle-review.js",

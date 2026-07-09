@@ -12,6 +12,7 @@
   const APP_NAME = "Damage Build Note";
   const SEASON_ALL = "all";
   const IS_BATTLE_REVIEW_PAGE = document.documentElement?.dataset?.page === "battle-review";
+  const IS_SIMPLE_DAMAGE_PAGE = document.documentElement?.dataset?.page === "simple-damage";
 
   const STAT_KEYS = [
     { key: "hp", label: "HP", csv: "HP" },
@@ -104,7 +105,7 @@
 
   const state = {
     activeView: "build",
-    calcSection: "simple",
+    calcSection: "moves",
     pokemon: [],
     moves: [],
     tools: [],
@@ -597,6 +598,10 @@
   }
 
   function render() {
+    if (IS_SIMPLE_DAMAGE_PAGE) {
+      renderSimpleDamageApp();
+      return;
+    }
     app.innerHTML = `
       <header class="topbar">
         <div class="brand">
@@ -604,6 +609,7 @@
           <h1>${APP_NAME}</h1>
         </div>
         <div class="header-actions">
+          <a class="text-button compact-button" href="simple-damage.html">簡易</a>
           <button class="icon-button" type="button" data-action="sync-calc" aria-label="育成をダメージ計算へ同期">${iconSync()}</button>
           <button class="text-button compact-button" type="button" data-action="install-app">追加</button>
           <button class="text-button" type="button" data-action="save">保存</button>
@@ -790,7 +796,6 @@
 
   function renderCalcSubTabs() {
     const tabs = [
-      ["simple", "簡易判定"],
       ["moves", "技・結果"],
       ["attacker", "攻撃側"],
       ["defender", "防御側"],
@@ -842,27 +847,44 @@
       `;
     }
     if (section === "condition") return renderConditionPanel();
-    if (section === "simple") return renderSimpleCalcPanel();
     return renderMovesPanel("calc", state.calc.attackerName, state.calc.moves, results);
   }
 
-  function renderSimpleCalcPanel() {
+  function renderSimpleDamageApp() {
+    app.innerHTML = `
+      <header class="topbar simple-topbar">
+        <div class="brand">
+          <p class="rule-line">Lv.50 / IV31固定 / 登録なしで使用</p>
+          <h1>簡易ダメージ判定</h1>
+        </div>
+        <div class="header-actions">
+          <a class="text-button" href="index.html">通常画面</a>
+        </div>
+      </header>
+      ${renderSeasonFilter()}
+      ${renderSimpleDamageView()}
+      ${renderPokemonDatalist()}
+    `;
+  }
+
+  function renderSimpleDamageView() {
     const available = getMoves(state.calc.attackerName);
     const selectedMove = findMoveInList(available, state.calc.moves?.[0]) || findAnyMove(state.calc.moves?.[0]) || available.find((move) => move.category !== "変化") || available[0] || null;
     const selectedKey = moveKey(selectedMove?.name || state.calc.moves?.[0] || "");
     const report = selectedMove ? calcSimpleRangeReport(selectedMove) : null;
+    const isMegaAttacker = isMegaPokemonName(state.calc.attackerName);
 
     return `
-      <div class="view simple-calc-view">
-        <section class="panel simple-calc-panel">
+      <main class="view simple-damage-view">
+        <section class="panel simple-damage-panel">
           <div class="panel-header">
-            <h2>簡易ダメージ判定</h2>
-            <span class="panel-meta">ポケモン・技・相手だけ</span>
+            <h2>ポケモン・技・相手だけ</h2>
+            <span class="panel-meta">4パターン自動判定</span>
           </div>
           <div class="panel-body">
             <div class="simple-calc-fields">
               <div class="field">
-                <label for="simple-attacker-name">攻撃側</label>
+                <label for="simple-attacker-name">攻撃側ポケモン</label>
                 <input id="simple-attacker-name" list="pokemon-options" data-field="calc-attacker-name" value="${escapeAttr(state.calc.attackerName)}" autocomplete="off" />
                 ${renderMegaActions("calc-attacker", state.calc.attackerName)}
               </div>
@@ -882,16 +904,19 @@
                 ${selectedMove ? renderMoveMeta(selectedMove) : ""}
               </div>
               <div class="field">
-                <label for="simple-defender-name">防御側</label>
+                <label for="simple-defender-name">防御側ポケモン</label>
                 <input id="simple-defender-name" list="pokemon-options" data-field="calc-defender-name" value="${escapeAttr(state.calc.defenderName)}" autocomplete="off" />
                 ${renderMegaActions("calc-defender", state.calc.defenderName)}
               </div>
             </div>
-            <p class="simple-calc-help">入力はこの3つだけ。努力値・性格・持ち物は、現実的な最小/最大の候補を自動で並べます。</p>
+            <div class="simple-damage-guide">
+              <p>努力値・性格・持ち物を入力せず、現実的な最小/最大候補で上下限を見ます。</p>
+              ${isMegaAttacker ? `<p class="simple-mega-note">攻撃側がメガ進化ポケモンのため、火力強化ありは非表示にしています。</p>` : ""}
+            </div>
           </div>
         </section>
         ${renderSimpleRangeResults(report)}
-      </div>
+      </main>
     `;
   }
 
@@ -908,12 +933,12 @@
       <section class="panel simple-result-panel">
         <div class="panel-header">
           <h2>判定結果</h2>
-          <span class="panel-meta">Lv.50 / IV31 / ランクなし</span>
+          <span class="panel-meta">${escapeHtml(report.defenderName)}想定</span>
         </div>
         <div class="panel-body">
           <div class="simple-result-summary">
             <strong>${escapeHtml(report.move.name)}</strong>
-            <span>${typePill(report.move.type)} ${escapeHtml(report.move.category)} / ${escapeHtml(report.defenderName)}想定</span>
+            <span>${typePill(report.move.type)} ${escapeHtml(report.move.category)} / Lv.50</span>
           </div>
           <div class="simple-result-groups">
             ${report.groups.map(renderSimpleResultGroup).join("")}
@@ -958,8 +983,11 @@
     const scenarios = simpleRangeScenarios(move);
     const groups = [
       { label: "通常火力", item: "", note: "持ち物なし" },
-      { label: "火力強化あり", item: simpleBoostItemForMove(move), note: "いのちのたま想定" },
     ];
+    const boostItem = simpleBoostItemForMove(move);
+    if (boostItem && !isMegaPokemonName(state.calc.attackerName)) {
+      groups.push({ label: "火力強化あり", item: boostItem, note: `${boostItem}想定` });
+    }
 
     return {
       move,
@@ -1075,6 +1103,10 @@
 
   function simpleBoostItemForMove(move) {
     return move?.category === "変化" ? "" : "いのちのたま";
+  }
+
+  function isMegaPokemonName(name) {
+    return state.baseByMega.has(name);
   }
 
   function simpleResultNote(row) {
