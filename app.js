@@ -104,7 +104,7 @@
 
   const state = {
     activeView: "build",
-    calcSection: "moves",
+    calcSection: "simple",
     pokemon: [],
     moves: [],
     tools: [],
@@ -790,6 +790,7 @@
 
   function renderCalcSubTabs() {
     const tabs = [
+      ["simple", "簡易判定"],
       ["moves", "技・結果"],
       ["attacker", "攻撃側"],
       ["defender", "防御側"],
@@ -841,7 +842,248 @@
       `;
     }
     if (section === "condition") return renderConditionPanel();
+    if (section === "simple") return renderSimpleCalcPanel();
     return renderMovesPanel("calc", state.calc.attackerName, state.calc.moves, results);
+  }
+
+  function renderSimpleCalcPanel() {
+    const available = getMoves(state.calc.attackerName);
+    const selectedMove = findMoveInList(available, state.calc.moves?.[0]) || findAnyMove(state.calc.moves?.[0]) || available.find((move) => move.category !== "変化") || available[0] || null;
+    const selectedKey = moveKey(selectedMove?.name || state.calc.moves?.[0] || "");
+    const report = selectedMove ? calcSimpleRangeReport(selectedMove) : null;
+
+    return `
+      <div class="view simple-calc-view">
+        <section class="panel simple-calc-panel">
+          <div class="panel-header">
+            <h2>簡易ダメージ判定</h2>
+            <span class="panel-meta">ポケモン・技・相手だけ</span>
+          </div>
+          <div class="panel-body">
+            <div class="simple-calc-fields">
+              <div class="field">
+                <label for="simple-attacker-name">攻撃側</label>
+                <input id="simple-attacker-name" list="pokemon-options" data-field="calc-attacker-name" value="${escapeAttr(state.calc.attackerName)}" autocomplete="off" />
+                ${renderMegaActions("calc-attacker", state.calc.attackerName)}
+              </div>
+              <div class="field simple-move-field">
+                <label for="simple-move-search">技</label>
+                <input id="simple-move-search" class="move-search" list="simple-move-options" data-field="move-search" data-mode="calc" data-slot="0" value="${escapeAttr(selectedMove?.name || state.calc.moves?.[0] || "")}" placeholder="技名を検索" autocomplete="off" />
+                <datalist id="simple-move-options">
+                  ${available.map((candidate) => `<option value="${escapeAttr(candidate.name)}">${escapeHtml(candidate.name)}${candidate.candidate ? " *" : ""}</option>`).join("")}
+                </datalist>
+                <div class="move-select-wrap">
+                  <span class="move-select-caption">候補</span>
+                  <select class="move-select" data-field="move" data-mode="calc" data-slot="0">
+                    <option value="">技を選択</option>
+                    ${available.map((candidate) => `<option value="${escapeAttr(candidate.name)}" ${moveKey(candidate.name) === selectedKey ? "selected" : ""}>${escapeHtml(candidate.name)}${candidate.candidate ? " *" : ""}</option>`).join("")}
+                  </select>
+                </div>
+                ${selectedMove ? renderMoveMeta(selectedMove) : ""}
+              </div>
+              <div class="field">
+                <label for="simple-defender-name">防御側</label>
+                <input id="simple-defender-name" list="pokemon-options" data-field="calc-defender-name" value="${escapeAttr(state.calc.defenderName)}" autocomplete="off" />
+                ${renderMegaActions("calc-defender", state.calc.defenderName)}
+              </div>
+            </div>
+            <p class="simple-calc-help">入力はこの3つだけ。努力値・性格・持ち物は、現実的な最小/最大の候補を自動で並べます。</p>
+          </div>
+        </section>
+        ${renderSimpleRangeResults(report)}
+      </div>
+    `;
+  }
+
+  function renderSimpleRangeResults(report) {
+    if (!report) {
+      return `
+        <section class="panel">
+          <div class="panel-body"><p class="empty-state">攻撃側・技・防御側を選ぶと、簡易判定を表示します。</p></div>
+        </section>
+      `;
+    }
+
+    return `
+      <section class="panel simple-result-panel">
+        <div class="panel-header">
+          <h2>判定結果</h2>
+          <span class="panel-meta">Lv.50 / IV31 / ランクなし</span>
+        </div>
+        <div class="panel-body">
+          <div class="simple-result-summary">
+            <strong>${escapeHtml(report.move.name)}</strong>
+            <span>${typePill(report.move.type)} ${escapeHtml(report.move.category)} / ${escapeHtml(report.defenderName)}想定</span>
+          </div>
+          <div class="simple-result-groups">
+            ${report.groups.map(renderSimpleResultGroup).join("")}
+          </div>
+          <p class="simple-result-note">相手の型が不明な時に、倒せる可能性と最低ラインをざっくり見るための表示です。特性は候補の中でダメージが大きくなる組み合わせを自動採用します。</p>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderSimpleResultGroup(group) {
+    return `
+      <article class="simple-result-group">
+        <div class="simple-result-group-head">
+          <h3>${escapeHtml(group.label)}</h3>
+          <small>${escapeHtml(group.note)}</small>
+        </div>
+        <div class="simple-result-list">
+          ${group.rows.map(renderSimpleResultRow).join("")}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderSimpleResultRow(row) {
+    const result = row.result;
+    return `
+      <div class="simple-result-row ${result?.ok ? "" : "is-empty"}">
+        <div class="simple-result-label">
+          <strong>${escapeHtml(row.label)}</strong>
+          <span>${escapeHtml(row.hint)}</span>
+        </div>
+        <div class="simple-result-damage">
+          <strong>${resultLabel(result)}</strong>
+          <small>${escapeHtml(simpleResultNote(row))}</small>
+        </div>
+      </div>
+    `;
+  }
+
+  function calcSimpleRangeReport(move) {
+    const scenarios = simpleRangeScenarios(move);
+    const groups = [
+      { label: "通常火力", item: "", note: "持ち物なし" },
+      { label: "火力強化あり", item: simpleBoostItemForMove(move), note: "いのちのたま想定" },
+    ];
+
+    return {
+      move,
+      attackerName: state.calc.attackerName,
+      defenderName: state.calc.defenderName,
+      groups: groups.map((group) => ({
+        ...group,
+        rows: scenarios.map((scenario) => ({
+          ...scenario,
+          result: calcSimpleScenario(move, scenario, group.item),
+        })),
+      })),
+    };
+  }
+
+  function simpleRangeScenarios(move) {
+    const attackStat = simpleAttackStatKey(move);
+    const defenseStat = simpleDefenseStatKey(move);
+    return [
+      { key: "max-max", label: "自分最大 × 相手最大", hint: "耐久振りにも届くか", attackerEv: simpleAttackerEv(attackStat, true), attackerNature: positiveNatureForStat(attackStat), defenderEv: simpleDefenderEv(defenseStat, true), defenderNature: positiveNatureForStat(defenseStat) },
+      { key: "max-min", label: "自分最大 × 相手最小", hint: "最高ダメージ", attackerEv: simpleAttackerEv(attackStat, true), attackerNature: positiveNatureForStat(attackStat), defenderEv: simpleDefenderEv(defenseStat, false), defenderNature: "まじめ" },
+      { key: "min-min", label: "自分最小 × 相手最小", hint: "無振り同士の目安", attackerEv: simpleAttackerEv(attackStat, false), attackerNature: "まじめ", defenderEv: simpleDefenderEv(defenseStat, false), defenderNature: "まじめ" },
+      { key: "min-max", label: "自分最小 × 相手最大", hint: "最低ライン", attackerEv: simpleAttackerEv(attackStat, false), attackerNature: "まじめ", defenderEv: simpleDefenderEv(defenseStat, true), defenderNature: positiveNatureForStat(defenseStat) },
+    ];
+  }
+
+  function calcSimpleScenario(move, scenario, item) {
+    const baseConfig = {
+      attackerName: state.calc.attackerName,
+      attackerNature: scenario.attackerNature,
+      attackerItem: item || "",
+      attackerAbility: "",
+      attackerEv: cloneEv(scenario.attackerEv),
+      attackerRank: defaultRank(),
+      defenderName: state.calc.defenderName,
+      defenderNature: scenario.defenderNature,
+      defenderItem: "",
+      defenderAbility: "",
+      defenderEv: cloneEv(scenario.defenderEv),
+      defenderRank: defaultRank(),
+      moves: [move.name],
+      moveHits: ["", "", "", ""],
+      weather: "なし",
+      field: "なし",
+      reflect: "なし",
+      attackerStatus: "なし",
+      defenderStatus: "なし",
+      attackerHpCondition: "通常",
+      defenderHpCondition: "通常",
+      allyFainted: 0,
+      criticalHit: false,
+      attackerMovedLast: false,
+      targetSwitched: false,
+      flashFireBoost: false,
+      chargedBoost: false,
+      plusMinusActive: false,
+      unburdenActive: false,
+      slowStartActive: false,
+      eelBoostActive: false,
+      rivalry: "なし",
+      metronomeCount: 1,
+      defenderHazards: defaultHazards(),
+    };
+    return calcHighestDamageAbilityResult(baseConfig, move);
+  }
+
+  function calcHighestDamageAbilityResult(config, move) {
+    const attackerAbilities = unique([...(getAbilityOptions(config.attackerName) || []), defaultAbility(config.attackerName), ""]).filter((value, index, list) => list.indexOf(value) === index);
+    const defenderAbilities = unique([...(getAbilityOptions(config.defenderName) || []), defaultAbility(config.defenderName), ""]).filter((value, index, list) => list.indexOf(value) === index);
+    let best = null;
+
+    attackerAbilities.forEach((attackerAbility) => {
+      defenderAbilities.forEach((defenderAbility) => {
+        const result = calcMoveDamage({ ...config, attackerAbility, defenderAbility }, move, 0);
+        const score = result?.ok ? result.max : -1;
+        if (!best || score > best.score) {
+          best = { score, result: { ...result, simpleAttackerAbility: attackerAbility, simpleDefenderAbility: defenderAbility } };
+        }
+      });
+    });
+
+    return best?.result || calcMoveDamage(config, move, 0);
+  }
+
+  function simpleAttackStatKey(move) {
+    if (move.name === "ボディプレス") return "def";
+    return move.category === "特殊" ? "spa" : "atk";
+  }
+
+  function simpleDefenseStatKey(move) {
+    if (["サイコショック", "サイコブレイク", "しんぴのつるぎ"].includes(move.name)) return "def";
+    return move.category === "特殊" ? "spd" : "def";
+  }
+
+  function simpleAttackerEv(stat, isMax) {
+    const ev = defaultEv();
+    if (isMax && ev[stat] !== undefined) ev[stat] = POINT_MAX;
+    return ev;
+  }
+
+  function simpleDefenderEv(stat, isMax) {
+    const ev = defaultEv();
+    if (isMax) {
+      ev.hp = POINT_MAX;
+      if (ev[stat] !== undefined) ev[stat] = POINT_MAX;
+    }
+    return ev;
+  }
+
+  function positiveNatureForStat(stat) {
+    return { atk: "いじっぱり", def: "ずぶとい", spa: "ひかえめ", spd: "おだやか", spe: "ようき" }[stat] || "まじめ";
+  }
+
+  function simpleBoostItemForMove(move) {
+    return move?.category === "変化" ? "" : "いのちのたま";
+  }
+
+  function simpleResultNote(row) {
+    const result = row.result;
+    if (!result) return "";
+    if (!result.ok) return result.reason || "計算対象外";
+    const abilityNote = [result.simpleAttackerAbility, result.simpleDefenderAbility ? `相手:${result.simpleDefenderAbility}` : ""].filter(Boolean).join(" / ");
+    const damageText = result.entryDamage > 0 ? `技${result.moveMin}-${result.moveMax}+設置${result.entryDamage}` : `${result.min}-${result.max}`;
+    return [result.note, damageText, abilityNote ? `特性 ${abilityNote}` : ""].filter(Boolean).join(" / ");
   }
 
   function renderConditionPanel() {
